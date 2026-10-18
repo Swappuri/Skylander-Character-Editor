@@ -38,18 +38,22 @@ The intended scope is standard playable character figures from:
 
 ## Download a release
 
-Open the repository's **Releases** page and download the asset matching your operating system. The release workflow in this repository builds separate packages on native GitHub-hosted runners for:
+Open the repository's **Releases** page and download the installer matching your operating system. Each release provides:
 
-- macOS Apple Silicon (ARM64)
-- macOS Intel (x86-64)
-- Windows (x86-64)
-- Linux (x86-64)
+- `Skylander-Character-Editor-macos-arm64.dmg` for Apple Silicon Macs.
+- `Skylander-Character-Editor-macos-x86_64.dmg` for Intel Macs.
+- `Skylander-Character-Editor-windows-x86_64-Setup.exe` for 64-bit Windows.
+- `Skylander-Character-Editor-linux-x86_64.AppImage` for 64-bit Linux (Ubuntu 22.04 or a compatible distribution).
 
-These release assets are created when a version tag such as `v1.0.0` is pushed. Until a tag has been published and the workflow has completed, there will not be any release binaries to download.
+The macOS disk image opens a drag-to-Applications window. The Windows setup program installs the app and creates a Start Menu shortcut, with an optional desktop shortcut. On Linux, mark the AppImage executable in its file properties (or run `chmod +x Skylander-Character-Editor-linux-x86_64.AppImage`), then double-click it to launch.
+
+These packages are built and attached automatically when a version tag such as `v1.0.0` is pushed. GitHub Actions runs the build and tests for all four platforms; the release appears after every platform build succeeds.
 
 ### macOS first launch
 
-The macOS build is not Developer ID signed or notarized by default. macOS may show a security warning. Only run software you have reviewed and trust. You may need to Control-click the app and choose **Open** the first time.
+The macOS build is not Developer ID signed or notarized by default. macOS may show a security warning. You may need to Control-click the app and choose **Open** the first time. A signed and notarized release requires an Apple Developer ID certificate and notarization credentials configured as GitHub Actions secrets.
+
+The Windows installer is not code-signed by default, so Windows SmartScreen may show an unknown-publisher warning. A trusted publisher signature requires a code-signing certificate configured for the release workflow.
 
 ## Run from source
 

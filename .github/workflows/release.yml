@@ -66,32 +66,61 @@ jobs:
           --add-data "assets${{ matrix.data_separator }}assets"
           src/skylander_character_editor.py
 
-      - name: Package macOS app
+      - name: Package macOS disk image
         if: matrix.kind == 'mac'
         shell: bash
         run: |
-          ditto -c -k --sequesterRsrc --keepParent \
-            "dist/Skylander Character Editor.app" \
-            "Skylander-Character-Editor-${{ matrix.asset }}.zip"
+          mkdir -p dmg-root
+          cp -R "dist/Skylander Character Editor.app" dmg-root/
+          ln -s /Applications dmg-root/Applications
+          hdiutil create \
+            -volname "Skylander Character Editor" \
+            -srcfolder dmg-root \
+            -ov -format UDZO \
+            "Skylander-Character-Editor-${{ matrix.asset }}.dmg"
 
-      - name: Package Windows app
+      - name: Package Windows installer
         if: matrix.kind == 'windows'
         shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
         run: |
-          Compress-Archive -Path "dist/Skylander Character Editor" -DestinationPath "Skylander-Character-Editor-${{ matrix.asset }}.zip"
+          $version = $env:RELEASE_VERSION -replace '^v', ''
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "installer\windows.iss"
+          Move-Item "dist\Skylander-Character-Editor-windows-x86_64-Setup.exe" "."
 
-      - name: Package Linux app
+      - name: Package Linux AppImage
         if: matrix.kind == 'linux'
         shell: bash
         run: |
-          cd dist
-          zip -r "../Skylander-Character-Editor-${{ matrix.asset }}.zip" "Skylander Character Editor"
+          sudo apt-get update
+          sudo apt-get install --yes libfuse2
+          mkdir -p AppDir/usr/lib/skylander-character-editor
+          cp -a "dist/Skylander Character Editor/." AppDir/usr/lib/skylander-character-editor/
+          cp installer/linux/AppRun AppDir/AppRun
+          cp installer/linux/skylander-character-editor.desktop AppDir/skylander-character-editor.desktop
+          python - <<'PY'
+          from PIL import Image, ImageDraw
+          image = Image.new("RGBA", (256, 256), "#15181c")
+          draw = ImageDraw.Draw(image)
+          draw.rounded_rectangle((12, 12, 244, 244), radius=48, fill="#20252b", outline="#51d4d0", width=10)
+          draw.ellipse((62, 62, 194, 194), outline="#51d4d0", width=14)
+          draw.ellipse((101, 101, 155, 155), fill="#51d4d0")
+          image.save("AppDir/skylander-character-editor.png")
+          PY
+          chmod +x AppDir/AppRun
+          curl -fL --retry 3 \
+            https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage \
+            -o appimagetool
+          echo "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  appimagetool" | sha256sum -c -
+          chmod +x appimagetool
+          APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 ./appimagetool AppDir "Skylander-Character-Editor-${{ matrix.asset }}.AppImage"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: Skylander-Character-Editor-${{ matrix.asset }}
-          path: Skylander-Character-Editor-${{ matrix.asset }}.zip
+          path: Skylander-Character-Editor-${{ matrix.asset }}*
           if-no-files-found: error
 
 
@@ -111,4 +140,7 @@ jobs:
       - name: Publish release with all platform packages
         uses: softprops/action-gh-release@v2
         with:
-          files: release-assets/*.zip
+          files: |
+            release-assets/*.dmg
+            release-assets/*.exe
+            release-assets/*.AppImage

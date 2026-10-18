@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Skylander Character Editor
+Comment=Edit Skylanders figure level and gold
+Exec=AppRun %F
+TryExec=AppRun
+Icon=skylander-character-editor
+Terminal=false
+Type=Application
+Categories=Utility;Game;
