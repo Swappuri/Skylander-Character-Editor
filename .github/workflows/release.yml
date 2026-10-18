@@ -19,18 +19,22 @@ jobs:
           - name: macOS Apple Silicon
             os: macos-15
             asset: macos-arm64
+            data_separator: ":"
             kind: mac
           - name: macOS Intel
             os: macos-15-intel
             asset: macos-x86_64
+            data_separator: ":"
             kind: mac
           - name: Windows x86-64
             os: windows-latest
             asset: windows-x86_64
+            data_separator: ";"
             kind: windows
           - name: Linux x86-64
             os: ubuntu-22.04
             asset: linux-x86_64
+            data_separator: ":"
             kind: linux
 
     runs-on: ${{ matrix.os }}
@@ -59,6 +63,7 @@ jobs:
           --name "Skylander Character Editor"
           --collect-all cryptography
           --collect-all tkinterdnd2
+          --add-data "assets${{ matrix.data_separator }}assets"
           src/skylander_character_editor.py
 
       - name: Package macOS app
