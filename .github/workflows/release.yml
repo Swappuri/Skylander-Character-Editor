@@ -1,0 +1,109 @@
+name: Build and publish release assets
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS Apple Silicon
+            os: macos-15
+            asset: macos-arm64
+            kind: mac
+          - name: macOS Intel
+            os: macos-15-intel
+            asset: macos-x86_64
+            kind: mac
+          - name: Windows x86-64
+            os: windows-latest
+            asset: windows-x86_64
+            kind: windows
+          - name: Linux x86-64
+            os: ubuntu-22.04
+            asset: linux-x86_64
+            kind: linux
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Build app
+        run: >
+          python -m PyInstaller
+          --noconfirm
+          --clean
+          --windowed
+          --name "Skylander Character Editor"
+          --collect-all cryptography
+          --collect-all tkinterdnd2
+          src/skylander_character_editor.py
+
+      - name: Package macOS app
+        if: matrix.kind == 'mac'
+        shell: bash
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            "dist/Skylander Character Editor.app" \
+            "Skylander-Character-Editor-${{ matrix.asset }}.zip"
+
+      - name: Package Windows app
+        if: matrix.kind == 'windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist/Skylander Character Editor" -DestinationPath "Skylander-Character-Editor-${{ matrix.asset }}.zip"
+
+      - name: Package Linux app
+        if: matrix.kind == 'linux'
+        shell: bash
+        run: |
+          cd dist
+          zip -r "../Skylander-Character-Editor-${{ matrix.asset }}.zip" "Skylander Character Editor"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Skylander-Character-Editor-${{ matrix.asset }}
+          path: Skylander-Character-Editor-${{ matrix.asset }}.zip
+          if-no-files-found: error
+
+
+  publish:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all platform packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: Skylander-Character-Editor-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish release with all platform packages
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*.zip
