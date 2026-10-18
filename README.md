@@ -23,6 +23,15 @@ A desktop utility for inspecting and editing level/XP and gold values in 1,024-b
 - Re-read generated output and check the requested XP/gold values before replacing the original.
 - Fresh-save initialization for recognized standard characters across the supported generations.
 
+## See it in action
+
+The screenshots below show Crash Bandicoot before editing, the selected level and gold in the editor, and the updated values in *Skylanders Imaginators*.
+
+| Before editing | Set values in the editor | After editing |
+| --- | --- | --- |
+| Level 1 · 0 gold | Level 15 · 15,000 gold | Level 15 · 15,000 gold |
+| ![Crash Bandicoot before editing: level 1 and 0 gold](assets/screenshots/crash-bandicoot-before.jpg) | ![Skylander Character Editor with level 15 and gold 15000 selected](assets/screenshots/editor-level-15-gold-15000.png) | ![Crash Bandicoot after editing: level 15 and 15000 gold](assets/screenshots/crash-bandicoot-after.jpg) |
+
 ## Compatibility
 
 The intended scope is standard playable character figures from:
@@ -115,4 +124,4 @@ Portraits and character metadata are community assets bundled from [Emulanders](
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Please include reproducible test details and never submit personal NFC dumps without permission from their owner.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Please include reproducible test details and never submit personal NFC dumps without permission from their owner. The [changelog](docs/CHANGELOG.md) and [release checklist](docs/RELEASE_CHECKLIST.md) are in `docs/`.

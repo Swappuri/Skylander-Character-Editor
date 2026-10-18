@@ -304,7 +304,6 @@ class App(TkinterDnD.Tk):
   self.gold_entry.pack(anchor="w",fill="x",pady=(8,18),ipady=14)
   self.button(panel,"Set max gold",lambda:self.gold.set(65000),secondary=True).pack(fill="x",pady=(0,26))
   tk.Frame(panel,bg=self.panel).pack(fill="both",expand=True)
-  tk.Label(panel,text="Applies to all selected files.",bg=self.panel,fg=self.muted,wraplength=220,justify="left",font=("TkDefaultFont",11)).pack(anchor="w",fill="x",pady=(8,4))
   self.apply_button=self.button(outer,"Apply to all selected files",self.apply,primary=True);self.apply_button.pack(fill="x",pady=(14,8))
   self.status=tk.StringVar(value="Files are edited in place after validation.")
   self.show_current()
