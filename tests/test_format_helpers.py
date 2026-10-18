@@ -37,7 +37,9 @@ def test_initialization_supports_recognized_non_trap_team_character():
 
 def test_initialization_rejects_unknown_id():
     raw = bytearray(1024)
-    raw[0x10:0x12] = (999).to_bytes(2, "little")
+    # 999 (0x03E7) is a catalogued Debug Minion, so use an ID outside the
+    # catalog to exercise the unknown-figure rejection path.
+    raw[0x10:0x12] = (0xFFFF).to_bytes(2, "little")
     try:
         app.initialize_character_plain(raw, 20, 65000)
     except ValueError as exc:
