@@ -16,11 +16,11 @@ A desktop utility for inspecting and editing level/XP and gold values in 1,024-b
 - Preview recognized figures one at a time with previous/next controls, including character portraits, name, generation, type, and element; batch settings still apply to every selected file.
 - Keep the original dark interface with a high-contrast element-colored accent.
 - Apply a common level (1–20) and gold amount (0–65,000) to a batch.
-- Preserve original filenames and edit in place after creating and validating a temporary output.
+- Choose **Create copies** (the default) or **Edit files in place** before applying changes. Copies are saved beside originals with a `_copy` suffix; a number is added if that name already exists.
 - Decrypt/encrypt data blocks using AES-128 ECB with MD5-derived per-block keys.
 - Detect literal-zero blocks rather than treating them as ciphertext.
 - Validate the editor's supported redundant save areas using CRC-16 checksums and sequence counters.
-- Re-read generated output and check the requested XP/gold values before replacing the original.
+- Re-read generated output and check the requested XP/gold values before saving the copy or replacing the original.
 - Fresh-save initialization for recognized standard characters across the supported generations.
 
 ## See it in action
@@ -109,7 +109,8 @@ Build separately on each target OS; PyInstaller is not a cross-compiler.
 
 ## Data safety
 
-- **Back up your `.sky` and `.dump` files before editing.** The app intentionally replaces the selected originals after its temporary output passes checks.
+- **Create copies is selected by default.** Copies are saved beside the originals with a `_copy` suffix. Choose **Edit files in place** only when you intend to replace the selected originals.
+- Back up your `.sky` and `.dump` files before editing, especially when choosing in-place edits.
 - Do not run batch edits on your only copy of a collection.
 - A successful internal checksum/readback test does not prove that a physical figure or every game will accept a dump.
 - Fresh-save initialization is limited to recognized standard character figures. It does not initialize traps, vehicles, Creation Crystals, adventure items, or unknown IDs.
@@ -118,7 +119,7 @@ Build separately on each target OS; PyInstaller is not a cross-compiler.
 
 ## Technical overview
 
-The application treats `.sky` and `.dump` as filename extensions for the same expected 1,024-byte data format; it does not recognize any alternate `.dump` encoding or wrapper. Its bundled catalog contains character IDs, metadata, and portrait PNGs for recognized figures. It derives AES keys from the figure header, block index, and a fixed Activision format constant using MD5, and transforms selected 16-byte blocks with AES-128 ECB. It evaluates redundant save areas with CRC-16 checksums and sequence counters, writes XP/gold fields, regenerates the supported checksums, encrypts the result, then decrypts and reads it back for verification. Batch writes use a temporary sibling file and replace the original only after validation succeeds.
+The application treats `.sky` and `.dump` as filename extensions for the same expected 1,024-byte data format; it does not recognize any alternate `.dump` encoding or wrapper. Its bundled catalog contains character IDs, metadata, and portrait PNGs for recognized figures. It derives AES keys from the figure header, block index, and a fixed Activision format constant using MD5, and transforms selected 16-byte blocks with AES-128 ECB. It evaluates redundant save areas with CRC-16 checksums and sequence counters, writes XP/gold fields, regenerates the supported checksums, encrypts the result, then decrypts and reads it back for verification. Batch writes first use a temporary sibling file; validated results are then saved as copies by default or replace the original when in-place editing is selected.
 
 Portraits and character metadata are community assets bundled from [Emulanders](https://github.com/joaohypo/emulanders/releases) and [Skylanders Collector](https://github.com/Karasu-huginn/Skylanders_Collector). See `assets/README.txt` for attribution and the upstream asset licensing caveat. The packaged application includes approximately 51 MB of portrait assets.
 

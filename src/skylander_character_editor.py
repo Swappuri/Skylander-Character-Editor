@@ -13,7 +13,7 @@ MAX_GOLD=65000
 LEVEL_XP={1:0,2:1000,3:2200,4:3800,5:6000,6:9000,7:13000,8:18000,9:24000,10:33000,11:43000,12:55000,13:70000,14:87000,15:106000,16:126000,17:147000,18:169000,19:184000,20:199535}
 # IDs are read from the unencrypted figure header. Keep this catalog conservative:
 # unknown figures are identified by ID instead of showing a guessed name/element.
-ELEMENT_COLORS={"Magic":"#a879ff","Water":"#48aaff","Fire":"#ff765e","Life":"#70d65f","Undead":"#a89cff","Earth":"#e6ad5b","Air":"#51d4d0","Tech":"#b2c7d8","Light":"#ffe16a","Dark":"#c19aff","Unknown":"#91a0ad"}
+ELEMENT_COLORS={"Magic":"#a879ff","Water":"#48aaff","Fire":"#ff765e","Life":"#70d65f","Undead":"#a89cff","Earth":"#e6ad5b","Air":"#51d4d0","Tech":"#f28c38","Light":"#ffe16a","Dark":"#c19aff","Unknown":"#91a0ad"}
 def contrast_text(hex_color):
  rgb=[int(hex_color[i:i+2],16)/255 for i in (1,3,5)]
  lum=sum(weight*(channel/12.92 if channel<=0.04045 else ((channel+0.055)/1.055)**2.4) for weight,channel in zip((0.2126,0.7152,0.0722),rgb))
@@ -26,7 +26,7 @@ def blend_color(start,end,fraction):
 class ActionButton(tk.Frame):
  """A fixed-size, fully clickable frame and label control."""
  def __init__(self,parent,text,command,background,foreground,border,font,width=260,height=48):
-  super().__init__(parent,width=width,height=height,bg=background,highlightthickness=2,highlightbackground=border,highlightcolor=border,takefocus=True,cursor="hand2")
+  super().__init__(parent,width=width,height=height,bg=background,highlightthickness=1,highlightbackground=border,highlightcolor=border,takefocus=True,cursor="hand2")
   self._button_options={"text":text,"command":command,"bg":background,"fg":foreground,"activebackground":background,"activeforeground":foreground,"highlightbackground":border,"highlightcolor":border,"font":font,"pady":13,"state":"normal"}
   self._hovered=False
   self._label=tk.Label(self,text=text,bg=background,fg=foreground,font=font,cursor="hand2",anchor="center")
@@ -255,66 +255,141 @@ def edit(src,dst,lv,g):
 
 class App(TkinterDnD.Tk):
  def __init__(self):
-  super().__init__();self.title("Skylander Character Editor");self.geometry("1040x760");self.minsize(860,680);self.files=[];self.current=0;self.folder_selection=False
-  self.bg="#15181c";self.surface="#20252b";self.panel="#252b32";self.text="#f4f6f8";self.muted="#b7c0c9";self.accent=ELEMENT_COLORS["Unknown"];self.configure(bg=self.bg)
+  super().__init__();self.title("Skylander Character Editor");self.geometry("1200x720");self.minsize(1120,700);self.files=[];self.current=0;self.folder_selection=False
+  self.bg="#14171b";self.surface="#1d232a";self.panel="#222a32";self.inset="#2b343e";self.text="#f5f7fa";self.muted="#b4bec9";self.accent=ELEMENT_COLORS["Unknown"];self.configure(bg=self.bg)
   self._buttons=[]
-  outer=tk.Frame(self,bg=self.bg,padx=24,pady=20);outer.pack(fill="both",expand=True)
-  tk.Label(outer,text="Skylander Character Editor",font=("TkDefaultFont",22,"bold"),bg=self.bg,fg=self.text,anchor="center").pack(fill="x")
-  tk.Label(outer,text="Set level and gold for one figure or a whole folder.",font=("TkDefaultFont",10),bg=self.bg,fg=self.muted,anchor="center").pack(fill="x",pady=(3,16))
-  self.accent_bar=tk.Frame(outer,bg=self.accent,height=3);self.accent_bar.pack(fill="x",pady=(0,14))
-  body=tk.Frame(outer,bg=self.bg);body.pack(fill="both",expand=True)
-  left_column=tk.Frame(body,bg=self.bg);left_column.pack(side="left",fill="both",expand=True,padx=(0,14))
-  actions=tk.Frame(left_column,bg=self.bg,height=44);actions.pack(fill="x",pady=(0,14));actions.pack_propagate(False)
+  outer=tk.Frame(self,bg=self.bg,padx=28,pady=22);outer.pack(fill="both",expand=True)
+  outer.grid_columnconfigure(0,weight=1);outer.grid_rowconfigure(3,weight=1)
+  header=tk.Frame(outer,bg=self.bg);header.grid(row=0,column=0,sticky="ew",pady=(0,16))
+  tk.Label(header,text="Skylander Character Editor",font=("TkDefaultFont",25,"bold"),bg=self.bg,fg=self.text,anchor="center").pack(fill="x")
+  tk.Label(header,text="Customize figure level and gold",font=("TkDefaultFont",12),bg=self.bg,fg=self.muted,anchor="center").pack(fill="x",pady=(4,0))
+  self.accent_bar=tk.Frame(outer,bg=self.accent,height=3);self.accent_bar.grid(row=1,column=0,sticky="ew",pady=(0,16))
+  actions=tk.Frame(outer,bg=self.bg,height=52);actions.grid(row=2,column=0,sticky="ew",pady=(0,18));actions.grid_propagate(False)
   self.choose_files_button=self.button(actions,"Choose Files…",self.filespick)
   self.choose_folder_button=self.button(actions,"Choose Folder…",self.folderpick)
   self.clear_button=self.button(actions,"Clear",lambda:self.setfiles([]))
   for index,button in enumerate((self.choose_files_button,self.choose_folder_button,self.clear_button)):
    actions.grid_columnconfigure(index,weight=1,uniform="actions")
-   button.grid(row=0,column=index,sticky="nsew",padx=4)
+   button.grid(row=0,column=index,sticky="nsew",padx=(0 if index==0 else 7,0 if index==2 else 7))
   self._drop_buttons={}
   self._register_drop_target(self.choose_files_button,"files")
   self._register_drop_target(self.choose_folder_button,"folder")
-  self.card=tk.Frame(left_column,bg=self.surface,highlightthickness=2,highlightbackground=self.accent,padx=14,pady=14)
+  body=tk.Frame(outer,bg=self.bg);body.grid(row=3,column=0,sticky="nsew");body.grid_propagate(False)
+  left_column=tk.Frame(body,bg=self.bg);left_column.pack(side="left",fill="both",expand=True,padx=(0,16))
+  self.card=tk.Frame(left_column,bg=self.surface,highlightthickness=1,highlightbackground=self.accent,padx=14,pady=14)
   self.card.pack(fill="both",expand=True)
-  self.counter=tk.StringVar(value="")
   self._navigation_visible=False
-  preview=tk.Frame(self.card,bg=self.surface);preview.pack(fill="both",expand=True)
-  self.back=self.button(preview,"‹",lambda:self.move(-1),secondary=True,width=44)
-  self.figure_panel=tk.Frame(preview,bg=self.surface);self.figure_panel.pack(fill="both",expand=True)
-  self.forward=self.button(preview,"›",lambda:self.move(1),secondary=True,width=44)
-  self.figure_stack=tk.Frame(self.figure_panel,bg=self.surface);self.figure_stack.pack(expand=True)
-  self.counter_label=tk.Label(self.figure_stack,textvariable=self.counter,bg=self.surface,fg=self.muted,font=("TkDefaultFont",12))
-  self.art=tk.Canvas(self.figure_stack,width=340,height=180,bg=self.surface,highlightthickness=0);self.art.pack(pady=(8,4))
-  self.name=tk.StringVar(value="No figure selected");self.name_label=tk.Label(self.figure_stack,textvariable=self.name,font=("TkDefaultFont",20,"bold"),bg=self.surface,fg=self.text);self.name_label.pack()
-  self.detail=tk.StringVar(value="Choose .sky or .dump files to preview their figure details.")
-  self.detail_label=tk.Label(self.figure_stack,textvariable=self.detail,font=("TkDefaultFont",12),bg=self.surface,fg=self.muted,justify="center",wraplength=520);self.detail_label.pack(pady=(7,10))
+  self._layout_mode=None
+  self.figure_panel=tk.Frame(self.card,bg=self.surface);self.figure_panel.pack(fill="both",expand=True)
+  self.empty_preview=tk.Label(self.figure_panel,text="Select a file or folder to preview a Skylander.",bg=self.surface,fg=self.muted,font=("TkDefaultFont",15),justify="center",wraplength=560)
+  self.navigation_group=tk.Frame(self.figure_panel,bg=self.surface);self.navigation_group.pack(expand=True)
+  self.navigation_group.grid_columnconfigure(1,weight=0)
+  self.back=self.button(self.navigation_group,"‹",lambda:self.move(-1),secondary=True,width=48)
+  self.back.grid(row=0,column=0,padx=(0,18),sticky="e")
+  self.back.grid_remove()
+  self.figure_content=tk.Frame(self.navigation_group,bg=self.surface)
+  self.counter_label=tk.Label(self.figure_content,text="",bg=self.surface,fg=self.muted,font=("TkDefaultFont",12,"bold"))
+  # Keep one canvas mounted at a constant size; only the artwork coordinates
+  # change between figure orientations, avoiding macOS Tk resize repaint gaps.
+  self.art=tk.Canvas(self.figure_content,width=496,height=409,bg=self.surface,highlightthickness=0)
+  self.art.place(x=0,y=0,width=496,height=409)
+  self._portrait_image=None
+  self.info_panel=tk.Frame(self.figure_content,bg=self.inset,width=240,height=377,highlightthickness=1,highlightbackground="#39434e")
+  self.info_panel.grid_propagate(False)
+  self.info_identity=tk.Frame(self.info_panel,bg=self.inset,padx=14,pady=14)
+  self.name=tk.StringVar(value="No figure selected");self.name_label=tk.Label(self.info_identity,textvariable=self.name,font=("TkDefaultFont",20,"bold"),bg=self.inset,fg=self.accent,anchor="w",justify="left",wraplength=210);self.name_label.pack(fill="x",pady=(0,10))
+  self.game=tk.StringVar(value="")
+  self.kind=tk.StringVar(value="")
+  self.element=tk.StringVar(value="")
+  self.meta_labels=[]
+  for label,var in (("GAME",self.game),("TYPE",self.kind),("ELEMENT",self.element)):
+   tk.Label(self.info_identity,text=label,font=("TkDefaultFont",9,"bold"),bg=self.inset,fg=self.muted,anchor="w").pack(fill="x",pady=(0,2))
+   value_label=tk.Label(self.info_identity,textvariable=var,font=("TkDefaultFont",13),bg=self.inset,fg=self.text,justify="left",anchor="w",wraplength=250)
+   value_label.pack(fill="x",pady=(0,6));self.meta_labels.append(value_label)
+  self.info_separator=tk.Frame(self.info_panel,bg="#3b4651",height=1)
+  self.info_progress=tk.Frame(self.info_panel,bg=self.inset,padx=14,pady=12)
+  tk.Label(self.info_progress,text="CURRENT STATS",font=("TkDefaultFont",9,"bold"),bg=self.inset,fg=self.muted,anchor="w").pack(fill="x",pady=(0,7))
   self.stats=tk.StringVar(value="")
-  self.stats_label=tk.Label(self.figure_stack,textvariable=self.stats,font=("TkDefaultFont",13,"bold"),bg=self.surface,fg=self.text,justify="center");self.stats_label.pack(pady=(0,10))
+  self.stats_label=tk.Label(self.info_progress,textvariable=self.stats,font=("TkDefaultFont",14,"bold"),bg=self.inset,fg=self.text,justify="left",anchor="w",wraplength=210);self.stats_label.pack(fill="x",pady=(0,12))
+  tk.Label(self.info_progress,text="SELECTED FILE",font=("TkDefaultFont",9,"bold"),bg=self.inset,fg=self.muted,anchor="w").pack(fill="x",pady=(0,5))
   self.filelabel=tk.StringVar(value="")
-  self.file_label=tk.Label(self.figure_stack,textvariable=self.filelabel,bg=self.surface,fg=self.muted,font=("TkDefaultFont",11),wraplength=520);self.file_label.pack()
-  panel=tk.Frame(body,bg=self.panel,highlightthickness=2,highlightbackground=self.accent,padx=24,pady=24,width=340);self.settings_panel=panel;panel.pack(side="right",fill="y");panel.pack_propagate(False)
-  self.settings_title=tk.Label(panel,text="BATCH SETTINGS",font=("TkDefaultFont",10,"bold"),bg=self.panel,fg=self.accent);self.settings_title.pack(anchor="w",pady=(0,22))
+  self.file_label=tk.Label(self.info_progress,textvariable=self.filelabel,bg=self.inset,fg=self.text,font=("TkDefaultFont",11),justify="left",anchor="w",wraplength=210);self.file_label.pack(fill="x")
+  self.forward=self.button(self.navigation_group,"›",lambda:self.move(1),secondary=True,width=48)
+  self.forward.grid(row=0,column=2,padx=(18,0),sticky="w")
+  self.forward.grid_remove()
+  panel=tk.Frame(body,bg=self.panel,highlightthickness=1,highlightbackground="#39434e",padx=22,pady=22,width=300);self.settings_panel=panel;panel.pack(side="right",fill="y");panel.pack_propagate(False)
+  self.settings_title=tk.Label(panel,text="BATCH SETTINGS",font=("TkDefaultFont",12,"bold"),bg=self.panel,fg=self.accent);self.settings_title.pack(anchor="w",pady=(0,24))
   self.lv=tk.IntVar(value=20);self.gold=tk.IntVar(value=65000)
-  tk.Label(panel,text="Level",bg=self.panel,fg=self.text,font=("TkDefaultFont",12)).pack(anchor="w")
-  self.level_entry=tk.Entry(panel,textvariable=self.lv,width=12,font=("TkDefaultFont",12),relief="flat",bd=0,bg="#343b44",fg=self.text,insertbackground=self.text,justify="center",highlightthickness=2,highlightbackground="#46515c",highlightcolor=self.accent)
-  self.level_entry.pack(anchor="w",fill="x",pady=(8,18),ipady=14)
-  self.button(panel,"Set max level",lambda:self.lv.set(20),secondary=True).pack(fill="x",pady=(0,26))
-  tk.Label(panel,text="Gold",bg=self.panel,fg=self.text,font=("TkDefaultFont",12)).pack(anchor="w")
-  self.gold_entry=tk.Entry(panel,textvariable=self.gold,width=12,font=("TkDefaultFont",12),relief="flat",bd=0,bg="#343b44",fg=self.text,insertbackground=self.text,justify="center",highlightthickness=2,highlightbackground="#46515c",highlightcolor=self.accent)
-  self.gold_entry.pack(anchor="w",fill="x",pady=(8,18),ipady=14)
-  self.button(panel,"Set max gold",lambda:self.gold.set(65000),secondary=True).pack(fill="x",pady=(0,26))
-  tk.Frame(panel,bg=self.panel).pack(fill="both",expand=True)
-  self.apply_button=self.button(outer,"Apply to all selected files",self.apply,primary=True);self.apply_button.pack(fill="x",pady=(14,8))
-  self.status=tk.StringVar(value="Files are edited in place after validation.")
+  tk.Label(panel,text="Level",bg=self.panel,fg=self.text,font=("TkDefaultFont",13,"bold")).pack(anchor="w")
+  self.level_entry=tk.Entry(panel,textvariable=self.lv,width=12,font=("TkDefaultFont",15,"bold"),relief="flat",bd=0,bg=self.inset,fg=self.text,insertbackground=self.text,justify="center",highlightthickness=1,highlightbackground="#485461",highlightcolor=self.accent)
+  self.level_entry.pack(anchor="w",fill="x",pady=(8,12),ipady=12)
+  self.button(panel,"Set max level",lambda:self.lv.set(20),secondary=True).pack(fill="x",pady=(0,24))
+  tk.Label(panel,text="Gold",bg=self.panel,fg=self.text,font=("TkDefaultFont",13,"bold")).pack(anchor="w")
+  self.gold_entry=tk.Entry(panel,textvariable=self.gold,width=12,font=("TkDefaultFont",15,"bold"),relief="flat",bd=0,bg=self.inset,fg=self.text,insertbackground=self.text,justify="center",highlightthickness=1,highlightbackground="#485461",highlightcolor=self.accent)
+  self.gold_entry.pack(anchor="w",fill="x",pady=(8,12),ipady=12)
+  self.button(panel,"Set max gold",lambda:self.gold.set(65000),secondary=True).pack(fill="x",pady=(0,24))
+  self.apply_button=self.button(outer,"Apply to all selected files",self.apply,primary=True);self.apply_button.grid(row=4,column=0,sticky="ew",pady=(16,0))
+  self.status=tk.StringVar(value="Choose files, set their stats, then apply as copies or edit in place.")
+  self.is_swap_force=False
+  self._layout_figure(False)
   self.show_current()
  def button(self,parent,text,command,secondary=False,primary=False,width=None):
   background=self.accent if primary else self.panel
   foreground=contrast_text(background) if primary else self.text
-  button=ActionButton(parent,text,command,background,foreground,self.accent,("TkDefaultFont",10,"bold" if primary else "normal"),width=112 if width is not None else 260,height=54 if width is not None else 48)
-  button._is_primary=primary;button._base_text=text;button._base_font=("TkDefaultFont",10,"bold" if primary else "normal");button._base_pady=13
+  font_size=21 if text in ("‹","›") else 12
+  button=ActionButton(parent,text,command,background,foreground,self.accent,("TkDefaultFont",font_size,"bold" if primary or text in ("‹","›") else "normal"),width=width if width is not None else 260,height=48 if width is not None else 48)
+  button._is_primary=primary;button._base_text=text;button._base_font=("TkDefaultFont",font_size,"bold" if primary or text in ("‹","›") else "normal");button._base_pady=13
   self._buttons.append(button)
   if primary:self.primary_button=button
   return button
+ def _layout_figure(self,swap_force):
+  """Arrange a fixed-size portrait preview and its matching information card."""
+  mode="swap" if swap_force else "portrait"
+  if mode==self._layout_mode:return
+  self._layout_mode=mode
+  self.counter_label.place_forget()
+  self.info_panel.grid_forget()
+  for widget in (self.info_identity,self.info_separator,self.info_progress):
+   widget.pack_forget();widget.grid_forget();widget.place_forget()
+  self.navigation_group.grid_columnconfigure(0,weight=0);self.navigation_group.grid_columnconfigure(1,weight=0);self.navigation_group.grid_columnconfigure(2,weight=0)
+  if swap_force:
+   art_width,art_height=494,184
+   info_height=184;counter_height=32;content_gap=9
+   self.figure_content.configure(width=art_width+2,height=counter_height+art_height+content_gap+info_height);self.figure_content.grid_propagate(False)
+   self.info_panel.configure(width=art_width,height=info_height,highlightthickness=1,highlightbackground=self.accent);self.info_panel.grid_propagate(False)
+   self.info_identity.configure(padx=10,pady=8);self.info_progress.configure(padx=10,pady=8)
+   self.name_label.configure(wraplength=190,font=("TkDefaultFont",17,"bold"));self.name_label.pack_configure(pady=(0,3))
+   for label in self.meta_labels:label.configure(wraplength=190,font=("TkDefaultFont",11));label.pack_configure(pady=(0,2))
+   self.stats_label.configure(wraplength=190,font=("TkDefaultFont",12,"bold"));self.stats_label.pack_configure(pady=(0,5))
+   self.file_label.configure(wraplength=190,font=("TkDefaultFont",10))
+   column_minimum=(art_width-6)//2
+   self.info_panel.grid_columnconfigure(0,weight=1,minsize=column_minimum);self.info_panel.grid_columnconfigure(1,weight=1,minsize=column_minimum);self.info_panel.grid_columnconfigure(2,weight=0,minsize=0)
+   self.info_identity.grid(row=0,column=0,sticky="nsew")
+   self.info_separator.configure(bg="#657381",width=1,height=160);self.info_separator.place(relx=0.5,rely=0.5,anchor="center",height=160)
+   self.info_progress.grid(row=0,column=1,sticky="nsew")
+   self.info_separator.lift()
+   self.info_panel.place(x=0,y=art_height+counter_height+content_gap,width=art_width,height=info_height)
+  else:
+   art_width,art_height=240,377
+   counter_height=32
+   gap=14
+   # Keep both portrait columns the same fixed height and prevent grid's
+   # requested-size negotiation from shrinking the detail card.
+   self.figure_content.configure(width=art_width*2+gap+2,height=counter_height+art_height);self.figure_content.grid_propagate(False)
+   self.info_panel.configure(width=240,height=377,highlightthickness=1,highlightbackground=self.accent);self.info_panel.grid_propagate(False)
+   self.info_identity.configure(padx=14,pady=14);self.info_progress.configure(padx=14,pady=12)
+   self.name_label.configure(wraplength=210,font=("TkDefaultFont",20,"bold"));self.name_label.pack_configure(pady=(0,10))
+   for label in self.meta_labels:label.configure(wraplength=210,font=("TkDefaultFont",12));label.pack_configure(pady=(0,6))
+   self.stats_label.configure(wraplength=210,font=("TkDefaultFont",14,"bold"));self.stats_label.pack_configure(pady=(0,12))
+   self.file_label.configure(wraplength=210,font=("TkDefaultFont",11))
+   self.info_identity.pack(fill="x");self.info_separator.configure(bg="#3b4651",width=1,height=0);self.info_separator.pack(fill="x",padx=20,pady=(0,0));self.info_progress.pack(fill="x")
+   self.info_panel.place(x=art_width+gap,y=counter_height,width=art_width,height=art_height)
+  self.navigation_group.grid_columnconfigure(1,weight=1)
+  self.figure_content.grid(row=0,column=1,sticky="n")
+  composition_height=art_height+(info_height+content_gap if swap_force else 0)
+  arrow_vertical_pad=counter_height+max(0,(composition_height-48)//2)
+  self.back.grid_configure(row=0,column=0,padx=(0,18),pady=(arrow_vertical_pad,0),sticky="ne")
+  self.forward.grid_configure(row=0,column=2,padx=(18,0),pady=(arrow_vertical_pad,0),sticky="nw")
  def _register_drop_target(self,button,kind):
   button.drop_target_register(DND_FILES)
   button._label.drop_target_register(DND_FILES)
@@ -371,13 +446,19 @@ class App(TkinterDnD.Tk):
   if self.files:self.current=(self.current+delta)%len(self.files);self.show_current()
  def show_current(self):
   if not self.files:
-   self.name.set("No figure selected");self.detail.set("Choose .sky or .dump files to preview their figure details.");self.stats.set("");self.filelabel.set("");self.accent=ELEMENT_COLORS["Unknown"];self.draw_art(None);self.apply_theme();self.update_navigation();return
+   self.is_swap_force=False;self._layout_figure(False)
+   self.navigation_group.pack_forget();self.empty_preview.place(relx=0.5,rely=0.5,anchor="center")
+   self.name.set("No figure selected");self.game.set("Choose a file");self.kind.set("");self.element.set("");self.stats.set("");self.filelabel.set("");self.accent=ELEMENT_COLORS["Unknown"]
+   self.apply_theme();self.update_navigation();self.update_idletasks();return
+  self.empty_preview.place_forget()
+  if not self.navigation_group.winfo_manager():self.navigation_group.pack(expand=True)
   p=self.files[self.current]
-  info=None;variant_info=None;image_name=None
+  info=None;variant_info=None;image_name=None;self.is_swap_force=False
   try:
    raw=Path(p).read_bytes()
    if len(raw)!=1024:raise ValueError(f"Expected 1,024 bytes; got {len(raw)}.")
    toy,info,variant_info=figure_info(raw)
+   self.is_swap_force=1000<=toy<=1015 or 2000<=toy<=2015
    try:
     _,_,xp,gold,_=inspect(p)
     self.stats.set(f"Level {level_for(xp)}  ·  Gold {gold:,}")
@@ -386,34 +467,39 @@ class App(TkinterDnD.Tk):
    if info:
     display_name=variant_info.get("name",info["name"]) if variant_info else info["name"]
     element=info.get("element","Unknown");game=info.get("game","Skylanders");kind=info.get("type","Skylander")
-    self.name.set(display_name);self.detail.set(f"{game}  ·  {kind}  ·  {element} element");self.accent=ELEMENT_COLORS.get(element,ELEMENT_COLORS["Unknown"])
+    self.name.set(display_name);self.game.set(game);self.kind.set(kind);self.element.set(f"{element} element");self.accent=ELEMENT_COLORS.get(element,ELEMENT_COLORS["Unknown"])
     image_name=variant_info.get("image") if variant_info else info.get("image")
    else:
-    self.name.set(f"Unknown figure (ID {toy})");self.detail.set("No matching character entry is available in the bundled catalog.");self.accent=ELEMENT_COLORS["Unknown"]
-  except Exception as e:self.name.set("Unable to read figure");self.detail.set(str(e));self.stats.set("Progress data unavailable");self.accent=ELEMENT_COLORS["Unknown"]
-  self.filelabel.set(p.name);self.draw_art(image_name,toy if info else None);self.apply_theme();self.update_navigation();self.update_idletasks()
+    self.name.set(f"Unknown figure (ID {toy})");self.game.set("Unknown game");self.kind.set("Unknown type");self.element.set("Unknown element");self.accent=ELEMENT_COLORS["Unknown"]
+  except Exception as e:self.name.set("Unable to read figure");self.game.set("File details unavailable");self.kind.set("");self.element.set("");self.stats.set("Progress data unavailable");self.accent=ELEMENT_COLORS["Unknown"]
+  self.filelabel.set(p.name);self._layout_figure(self.is_swap_force);self.draw_art(image_name,toy if info else None);self.apply_theme();self.update_navigation();self.update_idletasks()
+  width=max(1,self.art.winfo_width());height=max(1,self.art.winfo_height())
+  self.art.event_generate("<Expose>",x=0,y=0,width=width,height=height,when="now")
+  if self.folder_selection and len(self.files)>1:
+   self.counter_label.event_generate("<Expose>",x=0,y=0,width=max(1,self.counter_label.winfo_width()),height=max(1,self.counter_label.winfo_height()),when="now")
+  self.update_idletasks()
  def update_navigation(self):
   visible=self.folder_selection and len(self.files)>1
   if visible:
-   self.counter.set(f"{self.current+1} / {len(self.files)}")
+   self.counter_label.configure(text=f"{self.current+1} / {len(self.files)}")
+   self.counter_label.place(relx=0.5,y=0,anchor="n",height=24)
+   self.counter_label.lift()
+  else:
+   self.counter_label.configure(text="")
+   self.counter_label.place_forget()
   if visible==self._navigation_visible:return
   self._navigation_visible=visible
   if visible:
-   self.counter_label.pack(before=self.art,pady=(0,8))
-   self.figure_panel.pack_forget()
-   self.back.pack(side="left",anchor="center",padx=(0,18))
-   self.figure_panel.pack(side="left",fill="both",expand=True)
-   self.forward.pack(side="right",anchor="center",padx=(18,0))
+   self.back.grid()
+   self.forward.grid()
   else:
-   self.back.pack_forget();self.counter_label.pack_forget();self.forward.pack_forget();self.counter.set("")
-   self.figure_panel.pack_forget()
-   self.figure_panel.pack(fill="both",expand=True)
+   self.back.grid_remove();self.forward.grid_remove()
  def apply_theme(self):
   fg=contrast_text(self.accent)
   self.card.configure(highlightbackground=self.accent)
   self.settings_panel.configure(highlightbackground=self.accent)
   self.accent_bar.configure(bg=self.accent)
-  self.name_label.configure(fg=self.accent);self.settings_title.configure(fg=self.accent)
+  self.name_label.configure(fg=self.accent);self.settings_title.configure(fg=self.accent);self.info_panel.configure(highlightbackground=self.accent)
   self.level_entry.configure(highlightbackground=self.accent);self.gold_entry.configure(highlightbackground=self.accent)
   for button in self._buttons:
    bg=self.accent if button._is_primary else self.panel
@@ -424,28 +510,30 @@ class App(TkinterDnD.Tk):
     state["background"]=bg;state["foreground"]=fg
     if not state["inside"]:state["color"]=bg
  def draw_art(self,image_name,toy=None):
-  self.art.delete("all");self.art.configure(bg=self.surface);self._portrait_image=None
-  swap_force=toy is not None and (1000<=toy<=1015 or 2000<=toy<=2015)
-  canvas_width,canvas_height=(380,210) if swap_force else (340,300)
-  if self.folder_selection and len(self.files)>1:canvas_height-=30
-  self.art.configure(width=canvas_width,height=canvas_height)
+  art_canvas=self.art
+  art_canvas.configure(bg=self.surface)
+  canvas_width,canvas_height=(494,184) if self.is_swap_force else (240,377)
+  image_center_y=32+canvas_height//2
+  next_item=None;next_image=None
   if image_name:
    image_path=APP_ROOT/"assets"/"portraits"/Path(image_name).name
    if image_path.is_file():
     try:
      portrait=Image.open(image_path).convert("RGBA")
-     portrait.thumbnail((canvas_width,canvas_height),Image.Resampling.LANCZOS)
-     canvas_width,canvas_height=portrait.size
-     self.art.configure(width=canvas_width,height=canvas_height)
+     portrait=portrait.resize((canvas_width,canvas_height),Image.Resampling.LANCZOS)
      portrait=ImageTk.PhotoImage(portrait,master=self)
-     self._portrait_image=portrait
-     self.art.create_image(canvas_width//2,canvas_height//2,image=portrait,anchor="center")
-     return
+     next_image=portrait
+     next_item=art_canvas.create_image(canvas_width//2,image_center_y,image=portrait,anchor="center",tags=("portrait-next",))
     except (OSError,ValueError,tk.TclError):pass
-  self.art.create_text(canvas_width//2,canvas_height//2,text="Portrait unavailable",font=("TkDefaultFont",11),fill=self.muted)
+  if next_item is None:
+   next_item=art_canvas.create_text(canvas_width//2,image_center_y,text="Portrait unavailable",font=("TkDefaultFont",11),fill=self.muted,tags=("portrait-next",))
+  art_canvas.delete("portrait-content")
+  art_canvas.addtag_withtag("portrait-content","portrait-next")
+  art_canvas.dtag("portrait-next")
+  self._portrait_image=next_image
  def setfiles(self,x,from_folder=False):
   self.files=[Path(p) for p in x];self.folder_selection=from_folder;self.current=0;self.show_current()
-  if not x:self.status.set("Files are edited in place after validation.")
+  if not x:self.status.set("Choose files, set their stats, then apply as copies or edit in place.")
   if len(x)==1:
    try:
     _,_,xp,g,state=inspect(self.files[0])
@@ -470,6 +558,49 @@ class App(TkinterDnD.Tk):
     self.lift()
     self.focus_force()
   self.after_idle(restore)
+ def _choose_apply_mode(self,lv,g,uninitialized):
+  dialog=tk.Toplevel(self)
+  dialog.title("Apply changes")
+  dialog.transient(self)
+  dialog.resizable(False,False)
+  dialog.configure(bg=self.panel)
+  choice={"mode":None}
+  content=tk.Frame(dialog,bg=self.panel,padx=28,pady=24)
+  content.pack(fill="both",expand=True)
+  tk.Label(content,text="How should the changes be saved?",font=("TkDefaultFont",15,"bold"),bg=self.panel,fg=self.text).pack(anchor="w")
+  tk.Label(content,text=f"{len(self.files)} file(s) · Level {lv} · Gold {g:,}",font=("TkDefaultFont",11),bg=self.panel,fg=self.muted).pack(anchor="w",pady=(6,14))
+  tk.Label(content,text="Copies are saved beside the originals with a _copy suffix; existing names get a number.",font=("TkDefaultFont",10),bg=self.panel,fg=self.muted,wraplength=420,justify="left").pack(anchor="w",pady=(0,14))
+  if uninitialized:
+   tk.Label(content,text=f"A fresh progress save will be initialized for {uninitialized} uninitialized figure(s).",font=("TkDefaultFont",10),bg=self.panel,fg=self.muted,wraplength=420,justify="left").pack(anchor="w",pady=(0,14))
+  buttons=tk.Frame(content,bg=self.panel);buttons.pack(fill="x")
+  def finish(mode):
+   choice["mode"]=mode
+   dialog.destroy()
+  copies=ActionButton(buttons,"Create copies (Recommended)",lambda:finish("copy"),self.accent,contrast_text(self.accent),self.accent,("TkDefaultFont",10,"bold"),width=420,height=48)
+  copies.pack(fill="x",pady=(0,9))
+  inplace=ActionButton(buttons,"Edit files in place",lambda:finish("in_place"),self.panel,self.text,self.accent,("TkDefaultFont",10,"normal"),width=420,height=48)
+  inplace.pack(fill="x",pady=(0,9))
+  cancel=ActionButton(buttons,"Cancel",lambda:finish(None),self.panel,self.muted,self.accent,("TkDefaultFont",10,"normal"),width=420,height=42)
+  cancel.pack(fill="x")
+  dialog.bind("<Escape>",lambda event:finish(None))
+  dialog.bind("<Return>",lambda event:finish("copy"))
+  dialog.protocol("WM_DELETE_WINDOW",lambda:finish(None))
+  copies.focus_set()
+  dialog.update_idletasks()
+  x=self.winfo_rootx()+(self.winfo_width()-dialog.winfo_width())//2
+  y=self.winfo_rooty()+(self.winfo_height()-dialog.winfo_height())//2
+  dialog.geometry(f"+{x}+{y}")
+  self.wait_window(dialog)
+  return choice["mode"]
+ def _copy_destination(self,path,reserved):
+  path=Path(path)
+  candidate=path.with_name(f"{path.stem}_copy{path.suffix}")
+  index=2
+  while candidate.exists() or candidate in reserved:
+   candidate=path.with_name(f"{path.stem}_copy_{index}{path.suffix}")
+   index+=1
+  reserved.add(candidate)
+  return candidate
  def apply(self):
   if not self.files:return messagebox.showinfo("Select files","Select at least one .sky or .dump file.",parent=self)
   try:lv,g=int(self.lv.get()),int(self.gold.get())
@@ -481,20 +612,28 @@ class App(TkinterDnD.Tk):
     _,_,_,_,state=inspect(p)
     if state=="uninitialized": uninit.append(p)
    except: pass
-  extra=""
-  if uninit:
-   extra=f"\n\nA fresh progress save will be initialized for {len(uninit)} uninitialized character figure(s)."
-  if not messagebox.askyesno("Confirm",f"Modify {len(self.files)} file(s) in place?\n\nLevel {lv}\nGold {g:,}\n\nFilenames will stay unchanged.{extra}",parent=self):return
+  mode=self._choose_apply_mode(lv,g,len(uninit))
+  if mode is None:return
   ok=0;bad=[]
+  reserved=set()
   for p in self.files:
    tmp=p.with_name(p.name+".skyeditor.tmp")
+   destination=p if mode=="in_place" else self._copy_destination(p,reserved)
    try:
-    edit(p,tmp,lv,g);tmp.replace(p);ok+=1
+    edit(p,tmp,lv,g)
+    if mode=="copy":
+     if destination.exists():destination=self._copy_destination(p,reserved)
+     tmp.replace(destination)
+    else:tmp.replace(p)
+    ok+=1
    except Exception as e:bad.append(f"{p.name}: {e}")
    finally:
     if tmp.exists():tmp.unlink()
   self.show_current()
-  self.status.set(f"Updated {ok}; failed {len(bad)}.")
-  if bad:messagebox.showwarning("Finished",f"Updated {ok}; failed {len(bad)}.\n\n"+"\n".join(bad[:6]),parent=self)
-  else:messagebox.showinfo("Success",f"Updated {ok} file(s). Filenames unchanged.",parent=self)
+  action="Created copies from" if mode=="copy" else "Updated"
+  self.status.set(f"{action} {ok}; failed {len(bad)}.")
+  if bad:messagebox.showwarning("Finished",f"{action} {ok}; failed {len(bad)}.\n\n"+"\n".join(bad[:6]),parent=self)
+  else:
+   message=(f"Created {ok} edited copy/copies beside the originals. Original files were left unchanged." if mode=="copy" else f"Updated {ok} file(s) in place. Filenames unchanged.")
+   messagebox.showinfo("Success",message,parent=self)
 if __name__=="__main__":App().mainloop()
