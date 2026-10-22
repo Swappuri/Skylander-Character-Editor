@@ -1,6 +1,6 @@
 # Skylander Character Editor
 
-A desktop utility for inspecting and editing level/XP and gold values in 1,024-byte Skylanders character `.sky` and `.dump` files.
+A desktop utility for inspecting and editing Skylanders character level/XP and gold, plus Gearbits in SuperChargers vehicle `.sky` and `.dump` files. Files use the expected 1,024-byte format.
 
 > **Compatibility note:** The editor has been verified end-to-end with a Trap Team **Short Cut** dump. Additional supplied Trap Team dumps were used to test zero-block handling and parsing. It has **not** been comprehensively validated against every character and every Skylanders game. Back up your dumps before use. Fresh-save initialization supports recognized standard character figures across generations, but successful internal readback does not prove every game will accept the new save.
 
@@ -16,11 +16,12 @@ A desktop utility for inspecting and editing level/XP and gold values in 1,024-b
 - Preview recognized figures one at a time with previous/next controls, including character portraits, name, generation, type, and element; batch settings still apply to every selected file.
 - Keep the original dark interface with a high-contrast element-colored accent.
 - Apply a common level (1–20) and gold amount (0–65,000) to a batch.
+- Edit Gearbits up to the game's observed 33,000 limit on recognized SuperChargers vehicles. Fresh-save initialization uses a separate game-captured zero-Gearbit template for each of the 20 standard vehicle models. Vehicle armor, weapon upgrades, equipped mods, and other blocks are left unchanged.
 - Choose **Create copies** (the default) or **Edit files in place** before applying changes. Copies are saved beside originals with a `_copy` suffix; a number is added if that name already exists.
 - Decrypt/encrypt data blocks using AES-128 ECB with MD5-derived per-block keys.
 - Detect literal-zero blocks rather than treating them as ciphertext.
 - Validate the editor's supported redundant save areas using CRC-16 checksums and sequence counters.
-- Re-read generated output and check the requested XP/gold values before saving the copy or replacing the original.
+- Re-read generated output and check the requested XP/gold or Gearbits values before saving the copy or replacing the original.
 - Fresh-save initialization for recognized standard characters across the supported generations.
 
 ## See it in action
@@ -43,7 +44,7 @@ The intended scope is standard playable character figures from:
 - *Skylanders: SuperChargers*
 - *Skylanders: Imaginators*
 
-**Intended scope is not the same as verified compatibility.** The code assumes a shared standard-character save layout, but full coverage of every generation, character variant, and figure state has not been established. Figures with unfamiliar or inconsistent data may fail validation. Traps, vehicles, Creation Crystals, and adventure/magic items are out of scope. SWAP Force figures have special considerations and should be tested individually.
+**Intended scope is not the same as verified compatibility.** The code assumes a shared standard-character save layout, but full coverage of every generation, character variant, and figure state has not been established. Figures with unfamiliar or inconsistent data may fail validation. For SuperChargers vehicles, Gearbits editing and fresh-save initialization are supported for the 20 standard vehicle IDs using game-captured zero-Gearbit templates. This does not establish game acceptance of editor-generated blank-vehicle saves. The 33,000 Gearbits limit reflects observed in-game behavior: higher values revert to 33,000 when the vehicle is removed and reloaded. Vehicle armor, weapon upgrades, and equipped mods, as well as traps, Creation Crystals, and adventure/magic items, are out of scope. SWAP Force figures have special considerations and should be tested individually.
 
 ## Download a release
 
@@ -113,13 +114,13 @@ Build separately on each target OS; PyInstaller is not a cross-compiler.
 - Back up your `.sky` and `.dump` files before editing, especially when choosing in-place edits.
 - Do not run batch edits on your only copy of a collection.
 - A successful internal checksum/readback test does not prove that a physical figure or every game will accept a dump.
-- Fresh-save initialization is limited to recognized standard character figures. It does not initialize traps, vehicles, Creation Crystals, adventure items, or unknown IDs.
-- Keep a backup and verify newly initialized figures in the intended game; in-app readback checks the data structure and requested XP/gold, not game acceptance.
+- Fresh-save initialization is available for recognized standard character figures and the 20 standard SuperChargers vehicle IDs with captured zero-Gearbit templates. Traps, Creation Crystals, adventure items, and unknown IDs are not initialized by the editor.
+- Keep a backup and verify edited figures and vehicles in the intended game; in-app readback checks the data structure and requested values, not game acceptance.
 - This project is an independent community tool and is not affiliated with or endorsed by Activision or the Skylanders franchise owners.
 
 ## Technical overview
 
-The application treats `.sky` and `.dump` as filename extensions for the same expected 1,024-byte data format; it does not recognize any alternate `.dump` encoding or wrapper. Its bundled catalog contains character IDs, metadata, and portrait PNGs for recognized figures. It derives AES keys from the figure header, block index, and a fixed Activision format constant using MD5, and transforms selected 16-byte blocks with AES-128 ECB. It evaluates redundant save areas with CRC-16 checksums and sequence counters, writes XP/gold fields, regenerates the supported checksums, encrypts the result, then decrypts and reads it back for verification. Batch writes first use a temporary sibling file; validated results are then saved as copies by default or replace the original when in-place editing is selected.
+The application treats `.sky` and `.dump` as filename extensions for the same expected 1,024-byte data format; it does not recognize any alternate `.dump` encoding or wrapper. Its bundled catalog contains figure IDs, metadata, and portrait PNGs for recognized figures. It derives AES keys from the figure header, block index, and a fixed Activision format constant using MD5, and transforms selected 16-byte blocks with AES-128 ECB. It evaluates redundant save areas with CRC-16 checksums and sequence counters, writes character XP/gold or vehicle Gearbits fields, regenerates the supported checksums, encrypts the result, then decrypts and reads it back for verification. Batch writes first use a temporary sibling file; validated results are then saved as copies by default or replace the original when in-place editing is selected.
 
 Portraits and character metadata are community assets bundled from [Emulanders](https://github.com/joaohypo/emulanders/releases) and [Skylanders Collector](https://github.com/Karasu-huginn/Skylanders_Collector). See `assets/README.txt` for attribution and the upstream asset licensing caveat. The packaged application includes approximately 51 MB of portrait assets.
 

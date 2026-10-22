@@ -10,6 +10,7 @@ from tkinterdnd2 import DND_FILES,TkinterDnD
 from cryptography.hazmat.primitives.ciphers import Cipher,algorithms,modes
 CONST=b" Copyright (C) 2010 Activision. All Rights Reserved. "
 MAX_GOLD=65000
+MAX_GEARBITS=33000
 LEVEL_XP={1:0,2:1000,3:2200,4:3800,5:6000,6:9000,7:13000,8:18000,9:24000,10:33000,11:43000,12:55000,13:70000,14:87000,15:106000,16:126000,17:147000,18:169000,19:184000,20:199535}
 # IDs are read from the unencrypted figure header. Keep this catalog conservative:
 # unknown figures are identified by ID instead of showing a guessed name/element.
@@ -78,6 +79,10 @@ try:
  CHARACTER_CATALOG=json.loads((APP_ROOT/"assets"/"skylanders_db.json").read_text(encoding="utf-8"))
 except (OSError,ValueError):
  CHARACTER_CATALOG={}
+try:
+ VEHICLE_FRESH_BLOCKS={toy:{int(block,16):bytes.fromhex(value) for block,value in blocks.items()} for toy,blocks in json.loads((APP_ROOT/"assets"/"vehicle_fresh_templates.json").read_text(encoding="utf-8")).items()}
+except (OSError,ValueError,TypeError):
+ VEHICLE_FRESH_BLOCKS={}
 
 def figure_info(raw):
  toy=int.from_bytes(raw[0x10:0x12],"little")
@@ -167,6 +172,36 @@ def inspect(path):
  xp=int.from_bytes(p[oa:oa+3],"little")+int.from_bytes(p[ob+3:ob+5],"little")+int.from_bytes(p[ob+8:ob+12],"little")
  gold=int.from_bytes(p[oa+3:oa+5],"little")
  return toy,p,xp,gold,"initialized"
+def inspect_vehicle(path):
+ r=bytearray(Path(path).read_bytes())
+ if len(r)!=1024:raise ValueError(f"Expected 1,024 bytes; got {len(r)}.")
+ toy=int.from_bytes(r[0x10:0x12],"little")
+ record=CHARACTER_CATALOG.get(f"{toy:06X}")
+ if not record or record.get("type")!="Vehicle":raise ValueError("Gearbits editing is supported for recognized SuperChargers vehicles only.")
+ p=transform(r,True);a,b=active(p)
+ if a is None and b is None:return toy,p,0,"uninitialized"
+ if a is None or b is None:raise ValueError("Vehicle progress save is incomplete or damaged; no edit was performed.")
+ gearbits=int.from_bytes(p[b*16+8:b*16+12],"little")
+ return toy,p,gearbits,"initialized"
+def initialize_vehicle_plain(raw,gearbits):
+ toy=int.from_bytes(raw[0x10:0x12],"little")
+ blocks=VEHICLE_FRESH_BLOCKS.get(f"{toy:06X}")
+ if not blocks:raise ValueError("No game-captured zero-Gearbit template is available for this vehicle model yet; initialize it in SuperChargers first.")
+ p=transform(raw,True)
+ aa,bb=active(p)
+ if aa is not None or bb is not None:raise ValueError("Vehicle already has progress data; normal Gearbits editing should be used instead.")
+ # Do not mistake damaged/partial data for a factory blank.
+ for block in blocks:
+  if any(p[block*16:(block+1)*16]):raise ValueError("Vehicle has non-empty but invalid progress data; refusing initialization.")
+ for block,value in blocks.items():p[block*16:(block+1)*16]=value
+ for block in (0x11,0x2D):
+  offset=block*16
+  p[offset+8:offset+12]=gearbits.to_bytes(4,"little")
+  p[offset:offset+2]=crc2(p,block).to_bytes(2,"little")
+ a,b=active(p)
+ if a is None or b is None or int.from_bytes(p[b*16+8:b*16+12],"little")!=gearbits:
+  raise ValueError("Captured vehicle template failed save-record validation.")
+ return p
 def level_for(x):
  n=1
  for lv,t in LEVEL_XP.items():
@@ -252,6 +287,31 @@ def edit(src,dst,lv,g):
  if state!="initialized" or xp_check!=LEVEL_XP[lv] or gold_check!=g:
   Path(dst).unlink(missing_ok=True)
   raise ValueError("Post-write validation failed; original was left unchanged.")
+def edit_vehicle(src,dst,gearbits):
+ if not 0<=gearbits<=MAX_GEARBITS:raise ValueError(f"Gearbits must be between 0 and {MAX_GEARBITS:,}.")
+ raw=bytearray(Path(src).read_bytes())
+ if len(raw)!=1024:raise ValueError("Not a 1,024-byte regular figure dump.")
+ toy=int.from_bytes(raw[0x10:0x12],"little")
+ record=CHARACTER_CATALOG.get(f"{toy:06X}")
+ if not record or record.get("type")!="Vehicle":raise ValueError("Gearbits editing is supported for recognized SuperChargers vehicles only.")
+ p=transform(raw,True);aa,sb=active(p)
+ if aa is None and sb is None:
+  p=initialize_vehicle_plain(raw,gearbits)
+ else:
+  if aa is None or sb is None:raise ValueError("Vehicle progress save is incomplete or damaged; refusing to guess or overwrite it.")
+  db=0x2D if sb==0x11 else 0x11
+  sequence=(p[sb*16+2]+1)&255
+  copyblocks(p,sb,db,[0,1,3,4])
+  p[db*16+2]=sequence
+  p[db*16+8:db*16+12]=gearbits.to_bytes(4,"little")
+  p[db*16:db*16+2]=crc2(p,db).to_bytes(2,"little")
+ enc=transform(p,False)
+ if transform(enc,True)!=p:raise ValueError("Vehicle encryption verification failed.")
+ Path(dst).write_bytes(enc)
+ _,_,gearbits_check,state=inspect_vehicle(dst)
+ if state!="initialized" or gearbits_check!=gearbits:
+  Path(dst).unlink(missing_ok=True)
+  raise ValueError("Vehicle Gearbits validation failed; original was left unchanged.")
 
 class App(TkinterDnD.Tk):
  def __init__(self):
@@ -262,7 +322,7 @@ class App(TkinterDnD.Tk):
   outer.grid_columnconfigure(0,weight=1);outer.grid_rowconfigure(3,weight=1)
   header=tk.Frame(outer,bg=self.bg);header.grid(row=0,column=0,sticky="ew",pady=(0,16))
   tk.Label(header,text="Skylander Character Editor",font=("TkDefaultFont",25,"bold"),bg=self.bg,fg=self.text,anchor="center").pack(fill="x")
-  tk.Label(header,text="Customize figure level and gold",font=("TkDefaultFont",12),bg=self.bg,fg=self.muted,anchor="center").pack(fill="x",pady=(4,0))
+  self.subtitle_label=tk.Label(header,text="Customize figure level and gold",font=("TkDefaultFont",12),bg=self.bg,fg=self.muted,anchor="center");self.subtitle_label.pack(fill="x",pady=(4,0))
   self.accent_bar=tk.Frame(outer,bg=self.accent,height=3);self.accent_bar.grid(row=1,column=0,sticky="ew",pady=(0,16))
   actions=tk.Frame(outer,bg=self.bg,height=52);actions.grid(row=2,column=0,sticky="ew",pady=(0,18));actions.grid_propagate(False)
   self.choose_files_button=self.button(actions,"Choose Files…",self.filespick)
@@ -281,7 +341,7 @@ class App(TkinterDnD.Tk):
   self._navigation_visible=False
   self._layout_mode=None
   self.figure_panel=tk.Frame(self.card,bg=self.surface);self.figure_panel.pack(fill="both",expand=True)
-  self.empty_preview=tk.Label(self.figure_panel,text="Select a file or folder to preview a Skylander.",bg=self.surface,fg=self.muted,font=("TkDefaultFont",15),justify="center",wraplength=560)
+  self.empty_preview=tk.Label(self.figure_panel,text="Select a file or folder to preview a Skylander or vehicle.",bg=self.surface,fg=self.muted,font=("TkDefaultFont",15),justify="center",wraplength=560)
   self.navigation_group=tk.Frame(self.figure_panel,bg=self.surface);self.navigation_group.pack(expand=True)
   self.navigation_group.grid_columnconfigure(1,weight=0)
   self.back=self.button(self.navigation_group,"‹",lambda:self.move(-1),secondary=True,width=48)
@@ -308,10 +368,13 @@ class App(TkinterDnD.Tk):
    value_label.pack(fill="x",pady=(0,6));self.meta_labels.append(value_label)
   self.info_separator=tk.Frame(self.info_panel,bg="#3b4651",height=1)
   self.info_progress=tk.Frame(self.info_panel,bg=self.inset,padx=14,pady=12)
-  tk.Label(self.info_progress,text="CURRENT STATS",font=("TkDefaultFont",9,"bold"),bg=self.inset,fg=self.muted,anchor="w").pack(fill="x",pady=(0,7))
+  self.stats_heading=tk.Label(self.info_progress,text="LEVEL",font=("TkDefaultFont",9,"bold"),bg=self.inset,fg=self.muted,anchor="w");self.stats_heading.pack(fill="x",pady=(0,5))
   self.stats=tk.StringVar(value="")
-  self.stats_label=tk.Label(self.info_progress,textvariable=self.stats,font=("TkDefaultFont",14,"bold"),bg=self.inset,fg=self.text,justify="left",anchor="w",wraplength=210);self.stats_label.pack(fill="x",pady=(0,12))
-  tk.Label(self.info_progress,text="SELECTED FILE",font=("TkDefaultFont",9,"bold"),bg=self.inset,fg=self.muted,anchor="w").pack(fill="x",pady=(0,5))
+  self.stats_label=tk.Label(self.info_progress,textvariable=self.stats,font=("TkDefaultFont",12),bg=self.inset,fg=self.text,justify="left",anchor="w",wraplength=210);self.stats_label.pack(fill="x",pady=(0,10))
+  self.gold_stats_heading=tk.Label(self.info_progress,text="GOLD",font=("TkDefaultFont",9,"bold"),bg=self.inset,fg=self.muted,anchor="w");self.gold_stats_heading.pack(fill="x",pady=(0,5))
+  self.gold_stats=tk.StringVar(value="")
+  self.gold_stats_label=tk.Label(self.info_progress,textvariable=self.gold_stats,font=("TkDefaultFont",12),bg=self.inset,fg=self.text,justify="left",anchor="w",wraplength=210);self.gold_stats_label.pack(fill="x",pady=(0,12))
+  self.file_heading=tk.Label(self.info_progress,text="SELECTED FILE",font=("TkDefaultFont",9,"bold"),bg=self.inset,fg=self.muted,anchor="w");self.file_heading.pack(fill="x",pady=(0,5))
   self.filelabel=tk.StringVar(value="")
   self.file_label=tk.Label(self.info_progress,textvariable=self.filelabel,bg=self.inset,fg=self.text,font=("TkDefaultFont",11),justify="left",anchor="w",wraplength=210);self.file_label.pack(fill="x")
   self.forward=self.button(self.navigation_group,"›",lambda:self.move(1),secondary=True,width=48)
@@ -319,18 +382,24 @@ class App(TkinterDnD.Tk):
   self.forward.grid_remove()
   panel=tk.Frame(body,bg=self.panel,highlightthickness=1,highlightbackground="#39434e",padx=22,pady=22,width=300);self.settings_panel=panel;panel.pack(side="right",fill="y");panel.pack_propagate(False)
   self.settings_title=tk.Label(panel,text="BATCH SETTINGS",font=("TkDefaultFont",12,"bold"),bg=self.panel,fg=self.accent);self.settings_title.pack(anchor="w",pady=(0,24))
-  self.lv=tk.IntVar(value=20);self.gold=tk.IntVar(value=65000)
-  tk.Label(panel,text="Level",bg=self.panel,fg=self.text,font=("TkDefaultFont",13,"bold")).pack(anchor="w")
-  self.level_entry=tk.Entry(panel,textvariable=self.lv,width=12,font=("TkDefaultFont",15,"bold"),relief="flat",bd=0,bg=self.inset,fg=self.text,insertbackground=self.text,justify="center",highlightthickness=1,highlightbackground="#485461",highlightcolor=self.accent)
+  self.lv=tk.IntVar(value=1);self.gold=tk.IntVar(value=0)
+  self.level_group=tk.Frame(panel,bg=self.panel)
+  tk.Label(self.level_group,text="Level",bg=self.panel,fg=self.text,font=("TkDefaultFont",13,"bold")).pack(anchor="w")
+  self.level_entry=tk.Entry(self.level_group,textvariable=self.lv,width=12,font=("TkDefaultFont",15,"bold"),relief="flat",bd=0,bg=self.inset,fg=self.text,insertbackground=self.text,justify="center",highlightthickness=1,highlightbackground="#485461",highlightcolor=self.accent)
   self.level_entry.pack(anchor="w",fill="x",pady=(8,12),ipady=12)
-  self.button(panel,"Set max level",lambda:self.lv.set(20),secondary=True).pack(fill="x",pady=(0,24))
-  tk.Label(panel,text="Gold",bg=self.panel,fg=self.text,font=("TkDefaultFont",13,"bold")).pack(anchor="w")
-  self.gold_entry=tk.Entry(panel,textvariable=self.gold,width=12,font=("TkDefaultFont",15,"bold"),relief="flat",bd=0,bg=self.inset,fg=self.text,insertbackground=self.text,justify="center",highlightthickness=1,highlightbackground="#485461",highlightcolor=self.accent)
+  self.max_level_button=self.button(self.level_group,"Set max level",lambda:self.lv.set(20),secondary=True);self.max_level_button.pack(fill="x",pady=(0,24))
+  self.level_group.pack(fill="x")
+  self.gold_group=tk.Frame(panel,bg=self.panel)
+  self.gold_label=tk.Label(self.gold_group,text="Gold",bg=self.panel,fg=self.text,font=("TkDefaultFont",13,"bold"));self.gold_label.pack(anchor="w")
+  self.gold_entry=tk.Entry(self.gold_group,textvariable=self.gold,width=12,font=("TkDefaultFont",15,"bold"),relief="flat",bd=0,bg=self.inset,fg=self.text,insertbackground=self.text,justify="center",highlightthickness=1,highlightbackground="#485461",highlightcolor=self.accent)
   self.gold_entry.pack(anchor="w",fill="x",pady=(8,12),ipady=12)
-  self.button(panel,"Set max gold",lambda:self.gold.set(65000),secondary=True).pack(fill="x",pady=(0,24))
+  self.max_gold_button=self.button(self.gold_group,"Set max gold",lambda:self.gold.set(MAX_GOLD),secondary=True);self.max_gold_button.pack(fill="x",pady=(0,24))
+  self.gold_group.pack(fill="x")
   self.apply_button=self.button(outer,"Apply to all selected files",self.apply,primary=True);self.apply_button.grid(row=4,column=0,sticky="ew",pady=(16,0))
   self.status=tk.StringVar(value="Choose files, set their stats, then apply as copies or edit in place.")
   self.is_swap_force=False
+  self.is_vehicle=False
+  self._set_vehicle_mode(False)
   self._layout_figure(False)
   self.show_current()
  def button(self,parent,text,command,secondary=False,primary=False,width=None):
@@ -360,7 +429,8 @@ class App(TkinterDnD.Tk):
    self.info_identity.configure(padx=10,pady=8);self.info_progress.configure(padx=10,pady=8)
    self.name_label.configure(wraplength=190,font=("TkDefaultFont",17,"bold"));self.name_label.pack_configure(pady=(0,3))
    for label in self.meta_labels:label.configure(wraplength=190,font=("TkDefaultFont",11));label.pack_configure(pady=(0,2))
-   self.stats_label.configure(wraplength=190,font=("TkDefaultFont",12,"bold"));self.stats_label.pack_configure(pady=(0,5))
+   self.stats_label.configure(wraplength=190,font=("TkDefaultFont",11));self.stats_label.pack_configure(pady=(0,5))
+   self.gold_stats_label.configure(wraplength=190,font=("TkDefaultFont",11));self.gold_stats_label.pack_configure(pady=(0,5))
    self.file_label.configure(wraplength=190,font=("TkDefaultFont",10))
    column_minimum=(art_width-6)//2
    self.info_panel.grid_columnconfigure(0,weight=1,minsize=column_minimum);self.info_panel.grid_columnconfigure(1,weight=1,minsize=column_minimum);self.info_panel.grid_columnconfigure(2,weight=0,minsize=0)
@@ -380,7 +450,8 @@ class App(TkinterDnD.Tk):
    self.info_identity.configure(padx=14,pady=14);self.info_progress.configure(padx=14,pady=12)
    self.name_label.configure(wraplength=210,font=("TkDefaultFont",20,"bold"));self.name_label.pack_configure(pady=(0,10))
    for label in self.meta_labels:label.configure(wraplength=210,font=("TkDefaultFont",12));label.pack_configure(pady=(0,6))
-   self.stats_label.configure(wraplength=210,font=("TkDefaultFont",14,"bold"));self.stats_label.pack_configure(pady=(0,12))
+   self.stats_label.configure(wraplength=210,font=("TkDefaultFont",12));self.stats_label.pack_configure(pady=(0,10))
+   self.gold_stats_label.configure(wraplength=210,font=("TkDefaultFont",12));self.gold_stats_label.pack_configure(pady=(0,12))
    self.file_label.configure(wraplength=210,font=("TkDefaultFont",11))
    self.info_identity.pack(fill="x");self.info_separator.configure(bg="#3b4651",width=1,height=0);self.info_separator.pack(fill="x",padx=20,pady=(0,0));self.info_progress.pack(fill="x")
    self.info_panel.place(x=art_width+gap,y=counter_height,width=art_width,height=art_height)
@@ -444,26 +515,54 @@ class App(TkinterDnD.Tk):
   else:messagebox.showinfo("No files","No .sky or .dump files found directly in that folder.",parent=self)
  def move(self,delta):
   if self.files:self.current=(self.current+delta)%len(self.files);self.show_current()
+ def _set_vehicle_mode(self,vehicle):
+  self.is_vehicle=vehicle
+  if vehicle:
+   self.level_group.pack_forget()
+   self.gold_label.configure(text="Gearbits")
+   self.subtitle_label.configure(text="Set Gearbits for a SuperChargers vehicle")
+   self.max_gold_button.configure(text="Set max Gearbits",command=lambda:self.gold.set(MAX_GEARBITS))
+   if not self.max_gold_button.winfo_manager():self.max_gold_button.pack(fill="x",pady=(0,24))
+  else:
+   self.level_group.pack(fill="x",before=self.gold_group)
+   self.gold_label.configure(text="Gold")
+   self.subtitle_label.configure(text="Customize figure level and gold")
+   self.max_gold_button.configure(text="Set max gold",command=lambda:self.gold.set(MAX_GOLD))
+ def _set_stats_mode(self,vehicle):
+  self.stats_heading.configure(text="GEARBITS" if vehicle else "LEVEL")
+  if vehicle:
+   self.gold_stats_heading.pack_forget();self.gold_stats_label.pack_forget()
+  else:
+   if not self.gold_stats_heading.winfo_manager():self.gold_stats_heading.pack(fill="x",before=self.file_heading,pady=(0,5))
+   if not self.gold_stats_label.winfo_manager():self.gold_stats_label.pack(fill="x",before=self.file_heading,pady=(0,12))
  def show_current(self):
   if not self.files:
    self.is_swap_force=False;self._layout_figure(False)
+   self._set_vehicle_mode(False)
    self.navigation_group.pack_forget();self.empty_preview.place(relx=0.5,rely=0.5,anchor="center")
    self.name.set("No figure selected");self.game.set("Choose a file");self.kind.set("");self.element.set("");self.stats.set("");self.filelabel.set("");self.accent=ELEMENT_COLORS["Unknown"]
    self.apply_theme();self.update_navigation();self.update_idletasks();return
   self.empty_preview.place_forget()
   if not self.navigation_group.winfo_manager():self.navigation_group.pack(expand=True)
   p=self.files[self.current]
-  info=None;variant_info=None;image_name=None;self.is_swap_force=False
+  info=None;variant_info=None;image_name=None;self.is_swap_force=False;self._set_vehicle_mode(False)
   try:
    raw=Path(p).read_bytes()
    if len(raw)!=1024:raise ValueError(f"Expected 1,024 bytes; got {len(raw)}.")
    toy,info,variant_info=figure_info(raw)
+   self._set_vehicle_mode(bool(info and info.get("type")=="Vehicle"))
    self.is_swap_force=1000<=toy<=1015 or 2000<=toy<=2015
    try:
-    _,_,xp,gold,_=inspect(p)
-    self.stats.set(f"Level {level_for(xp)}  ·  Gold {gold:,}")
+    if self.is_vehicle:
+     _,_,gearbits,state=inspect_vehicle(p)
+     self._set_stats_mode(True);self.stats.set(f"{gearbits:,}")
+    else:
+     _,_,xp,gold,_=inspect(p)
+     self._set_stats_mode(False);self.stats.set(str(level_for(xp)));self.gold_stats.set(f"{gold:,}")
    except Exception:
+    self._set_stats_mode(self.is_vehicle)
     self.stats.set("Progress data unavailable")
+    self.gold_stats.set("")
    if info:
     display_name=variant_info.get("name",info["name"]) if variant_info else info["name"]
     element=info.get("element","Unknown");game=info.get("game","Skylanders");kind=info.get("type","Skylander")
@@ -532,18 +631,25 @@ class App(TkinterDnD.Tk):
   art_canvas.dtag("portrait-next")
   self._portrait_image=next_image
  def setfiles(self,x,from_folder=False):
-  self.files=[Path(p) for p in x];self.folder_selection=from_folder;self.current=0;self.show_current()
-  if not x:self.status.set("Choose files, set their stats, then apply as copies or edit in place.")
-  if len(x)==1:
+  self.files=[Path(p) for p in x];self.folder_selection=from_folder;self.current=0
+  self.lv.set(1);self.gold.set(0);self.show_current()
+  if not x:
+   self.status.set("Choose files, set their stats, then apply as copies or edit in place.")
+  elif x:
    try:
-    _,_,xp,g,state=inspect(self.files[0])
-    self.lv.set(level_for(xp));self.gold.set(min(g,MAX_GOLD))
-    if state=="uninitialized":
-     self.status.set("Current: Level 1, XP 0, gold 0 — uninitialized. A fresh standard-character progress save will be constructed when you apply changes.")
+    raw=self.files[0].read_bytes();toy,record,_=figure_info(raw)
+    if record and record.get("type")=="Vehicle":
+     _,_,gearbits,state=inspect_vehicle(self.files[0])
+     source=f"{self.files[0].name}" if len(x)>1 else "selected vehicle"
+     if state=="initialized":self.status.set(f"Current: {gearbits:,} Gearbits"+(f" from {source}; value applies to all {len(x)} selected files." if len(x)>1 else ""))
+     elif f"{toy:06X}" in VEHICLE_FRESH_BLOCKS:self.status.set((f"Batch starts at 0 Gearbits from uninitialized {source}; value applies to all {len(x)} selected files." if len(x)>1 else "Fresh game-captured vehicle template available; progress will be initialized when you apply."))
+     else:self.status.set("No matching fresh vehicle template. Initialize it in SuperChargers before editing Gearbits.")
     else:
-     self.status.set(f"Current: level {level_for(xp)}, XP {xp:,}, gold {g:,}")
+     _,_,xp,g,state=inspect(self.files[0])
+     source=f"{self.files[0].name}" if len(x)>1 else "selected Skylander"
+     if state=="uninitialized":self.status.set((f"Batch starts at Level 1 and 0 gold from uninitialized {source}; values apply to all {len(x)} selected files." if len(x)>1 else "Current: Level 1, XP 0, gold 0 — uninitialized. A fresh standard-character progress save will be constructed when you apply changes."))
+     else:self.status.set(f"Current: level {level_for(xp)}, XP {xp:,}, gold {g:,}"+(f" from {source}; values apply to all {len(x)} selected files." if len(x)>1 else ""))
    except Exception as e:self.status.set(str(e))
-  elif x:self.status.set(f"Ready to apply the same stats to {len(x)} files.")
  def filespick(self):
   x=filedialog.askopenfilenames(parent=self,filetypes=[("Skylander dumps","*.sky *.dump"),("All files","*")]);
   self._restore_window_focus()
@@ -558,7 +664,7 @@ class App(TkinterDnD.Tk):
     self.lift()
     self.focus_force()
   self.after_idle(restore)
- def _choose_apply_mode(self,lv,g,uninitialized):
+ def _choose_apply_mode(self,lv,g,uninitialized,vehicle=False):
   dialog=tk.Toplevel(self)
   dialog.title("Apply changes")
   dialog.transient(self)
@@ -568,10 +674,12 @@ class App(TkinterDnD.Tk):
   content=tk.Frame(dialog,bg=self.panel,padx=28,pady=24)
   content.pack(fill="both",expand=True)
   tk.Label(content,text="How should the changes be saved?",font=("TkDefaultFont",15,"bold"),bg=self.panel,fg=self.text).pack(anchor="w")
-  tk.Label(content,text=f"{len(self.files)} file(s) · Level {lv} · Gold {g:,}",font=("TkDefaultFont",11),bg=self.panel,fg=self.muted).pack(anchor="w",pady=(6,14))
+  summary=f"{len(self.files)} file(s) · Gearbits {g:,}" if vehicle else f"{len(self.files)} file(s) · Level {lv} · Gold {g:,}"
+  tk.Label(content,text=summary,font=("TkDefaultFont",11),bg=self.panel,fg=self.muted).pack(anchor="w",pady=(6,14))
   tk.Label(content,text="Copies are saved beside the originals with a _copy suffix; existing names get a number.",font=("TkDefaultFont",10),bg=self.panel,fg=self.muted,wraplength=420,justify="left").pack(anchor="w",pady=(0,14))
   if uninitialized:
-   tk.Label(content,text=f"A fresh progress save will be initialized for {uninitialized} uninitialized figure(s).",font=("TkDefaultFont",10),bg=self.panel,fg=self.muted,wraplength=420,justify="left").pack(anchor="w",pady=(0,14))
+   detail=(f"A fresh progress save will be initialized from a game-captured template for {uninitialized} vehicle(s)." if vehicle else f"A fresh progress save will be initialized for {uninitialized} uninitialized figure(s).")
+   tk.Label(content,text=detail,font=("TkDefaultFont",10),bg=self.panel,fg=self.muted,wraplength=420,justify="left").pack(anchor="w",pady=(0,14))
   buttons=tk.Frame(content,bg=self.panel);buttons.pack(fill="x")
   def finish(mode):
    choice["mode"]=mode
@@ -603,16 +711,41 @@ class App(TkinterDnD.Tk):
   return candidate
  def apply(self):
   if not self.files:return messagebox.showinfo("Select files","Select at least one .sky or .dump file.",parent=self)
-  try:lv,g=int(self.lv.get()),int(self.gold.get())
-  except:return messagebox.showerror("Invalid","Level and gold must be whole numbers.",parent=self)
-  if not 1<=lv<=20 or not 0<=g<=65000:return messagebox.showerror("Invalid","Level must be 1–20; gold 0–65,000.",parent=self)
-  uninit=[]
-  for p in self.files:
-   try:
-    _,_,_,_,state=inspect(p)
-    if state=="uninitialized": uninit.append(p)
-   except: pass
-  mode=self._choose_apply_mode(lv,g,len(uninit))
+  try:
+   vehicle_types=[]
+   for p in self.files:
+    raw=p.read_bytes()
+    if len(raw)!=1024:raise ValueError(f"{p.name}: expected a 1,024-byte figure dump.")
+    _,record,_=figure_info(raw)
+    vehicle_types.append(bool(record and record.get("type")=="Vehicle"))
+  except Exception as e:return messagebox.showerror("Unable to inspect selection",str(e),parent=self)
+  if any(vehicle_types) and not all(vehicle_types):
+   return messagebox.showerror("Mixed figure types","Apply Gearbits to vehicles and level/gold to Skylanders in separate batches.",parent=self)
+  vehicle=all(vehicle_types)
+  if vehicle:
+   try:g=int(self.gold.get())
+   except:return messagebox.showerror("Invalid","Gearbits must be a whole number.",parent=self)
+   if not 0<=g<=MAX_GEARBITS:return messagebox.showerror("Invalid",f"Gearbits must be between 0 and {MAX_GEARBITS:,}.",parent=self)
+   uninit=[]
+   for p in self.files:
+    try:_,_,_,state=inspect_vehicle(p)
+    except Exception as e:return messagebox.showerror("Unable to inspect vehicle",f"{p.name}: {e}",parent=self)
+    if state=="uninitialized":uninit.append(p)
+   for p in uninit:
+    try:initialize_vehicle_plain(p.read_bytes(),g)
+    except Exception as e:return messagebox.showerror("Vehicle cannot be initialized safely",f"{p.name}: {e}",parent=self)
+   lv=None
+  else:
+   try:lv,g=int(self.lv.get()),int(self.gold.get())
+   except:return messagebox.showerror("Invalid","Level and gold must be whole numbers.",parent=self)
+   if not 1<=lv<=20 or not 0<=g<=65000:return messagebox.showerror("Invalid","Level must be 1–20; gold 0–65,000.",parent=self)
+   uninit=[]
+   for p in self.files:
+    try:
+     _,_,_,_,state=inspect(p)
+     if state=="uninitialized":uninit.append(p)
+    except:pass
+  mode=self._choose_apply_mode(lv,g,len(uninit),vehicle=vehicle)
   if mode is None:return
   ok=0;bad=[]
   reserved=set()
@@ -620,7 +753,8 @@ class App(TkinterDnD.Tk):
    tmp=p.with_name(p.name+".skyeditor.tmp")
    destination=p if mode=="in_place" else self._copy_destination(p,reserved)
    try:
-    edit(p,tmp,lv,g)
+    if vehicle:edit_vehicle(p,tmp,g)
+    else:edit(p,tmp,lv,g)
     if mode=="copy":
      if destination.exists():destination=self._copy_destination(p,reserved)
      tmp.replace(destination)
