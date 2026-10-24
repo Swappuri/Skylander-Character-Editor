@@ -39,7 +39,7 @@ The intended scope is standard playable character figures from:
 
 - *Skylanders: Spyro's Adventure*
 - *Skylanders: Giants*
-- *Skylanders SWAP Force*
+- *Skylanders: SWAP Force*
 - *Skylanders: Trap Team*
 - *Skylanders: SuperChargers*
 - *Skylanders: Imaginators*
