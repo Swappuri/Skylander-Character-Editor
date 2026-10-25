@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#14171b">
+  <meta name="description" content="Edit Skylander level and gold, or SuperChargers vehicle Gearbits, directly in your browser.">
+  <title>Skylander Character Editor</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="app-header">
+      <div class="brand">
+        <img class="brand-icon" id="brand-icon" alt="" hidden>
+        <div>
+          <h1>Skylander Character Editor</h1>
+          <p>Customize figure level, gold, and Gearbits</p>
+        </div>
+      </div>
+      <p class="privacy-note"><span class="privacy-dot"></span> Files stay on your device. Nothing is uploaded.</p>
+    </header>
+    <div class="accent-rule" aria-hidden="true"></div>
+
+    <section class="file-actions" aria-label="Choose figure files">
+      <label class="action-button" for="file-picker">Choose files…</label>
+      <label class="action-button" for="folder-picker">Choose folder…</label>
+      <button class="action-button" id="clear-button" type="button">Clear</button>
+      <input id="file-picker" type="file" accept=".sky,.dump" multiple hidden>
+      <input id="folder-picker" type="file" accept=".sky,.dump" webkitdirectory multiple hidden>
+    </section>
+
+    <section class="main-layout">
+      <section class="preview-panel" aria-label="Figure preview">
+        <div class="empty-state" id="empty-state">
+          <span class="empty-icon" aria-hidden="true">✦</span>
+          <h2>Ready for your figures</h2>
+          <p>Select one or more <code>.sky</code> or <code>.dump</code> files, or choose a folder to preview a Skylander or vehicle.</p>
+        </div>
+        <div id="preview-view" class="preview-view" hidden>
+          <div class="file-counter" id="file-counter" aria-live="polite"></div>
+          <div class="preview-stage">
+            <button class="nav-button" id="previous-button" type="button" aria-label="Previous figure">‹</button>
+            <div class="figure-content" id="figure-content">
+              <div class="art-box" id="art-box">
+                <img id="figure-art" alt="Skylander figure portrait">
+                <div class="portrait-fallback" id="portrait-fallback" hidden>Portrait unavailable</div>
+              </div>
+              <article class="details-box" id="details-box">
+                <h2 id="figure-name">Figure</h2>
+                <div class="identity-grid">
+                  <div><h3>Game</h3><p id="figure-game"></p></div>
+                  <div><h3>Type</h3><p id="figure-type"></p></div>
+                  <div class="element-row"><h3>Element</h3><p id="figure-element"></p></div>
+                </div>
+                <div class="stats-divider"></div>
+                <div class="progress-grid" id="character-progress">
+                  <div><h3>Level</h3><p id="current-level"></p></div>
+                  <div><h3>Gold</h3><p id="current-gold"></p></div>
+                </div>
+                <div class="progress-grid vehicle-progress" id="vehicle-progress" hidden>
+                  <div><h3>Gearbits</h3><p id="current-gearbits"></p></div>
+                </div>
+                <div class="selected-file"><h3>Selected file</h3><p id="selected-file"></p></div>
+              </article>
+            </div>
+            <button class="nav-button" id="next-button" type="button" aria-label="Next figure">›</button>
+          </div>
+          <p class="preview-message" id="preview-message" role="status"></p>
+        </div>
+      </section>
+
+      <aside class="settings-panel" aria-label="Batch settings">
+        <h2 id="settings-heading">Batch settings</h2>
+        <div class="setting-group" id="level-group">
+          <label for="level-input">Level</label>
+          <input id="level-input" type="number" min="1" max="20" step="1" value="1" inputmode="numeric">
+          <button class="action-button secondary" id="max-level" type="button">Set max level</button>
+        </div>
+        <div class="setting-group" id="gold-group">
+          <label for="gold-input" id="currency-label">Gold</label>
+          <input id="gold-input" type="number" min="0" max="65000" step="1" value="0" inputmode="numeric">
+          <button class="action-button secondary" id="max-currency" type="button">Set max gold</button>
+        </div>
+        <p class="settings-hint" id="settings-hint">Starting values: Level 1 and 0 gold. Set the values you want applied to the selection.</p>
+      </aside>
+    </section>
+
+    <button class="apply-button" id="apply-button" type="button" disabled>Download edited copies</button>
+    <p class="footer-note">Downloads edited copies with a <code>_copy</code> suffix. Original files are never changed.</p>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </main>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

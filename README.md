@@ -2,6 +2,8 @@
 
 A desktop utility for inspecting and editing Skylanders character level/XP and gold, plus Gearbits in SuperChargers vehicle `.sky` and `.dump` files. Files use the expected 1,024-byte format.
 
+**[Open the browser editor](https://swappuri.github.io/Skylander-Character-Editor/)** · The web version runs locally in your browser. It downloads edited copies and never uploads or overwrites source files.
+
 > **Compatibility note:** The editor has been verified end-to-end with a Trap Team **Short Cut** dump. Additional supplied Trap Team dumps were used to test zero-block handling and parsing. It has **not** been comprehensively validated against every character and every Skylanders game. Back up your dumps before use. Fresh-save initialization supports recognized standard character figures across generations, but successful internal readback does not prove every game will accept the new save.
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
@@ -23,6 +25,7 @@ A desktop utility for inspecting and editing Skylanders character level/XP and g
 - Validate the editor's supported redundant save areas using CRC-16 checksums and sequence counters.
 - Re-read generated output and check the requested XP/gold or Gearbits values before saving the copy or replacing the original.
 - Fresh-save initialization for recognized standard characters across the supported generations.
+- Use the browser-based editor without installing the desktop application.
 
 ## See it in action
 
@@ -58,6 +61,8 @@ Open the repository's **Releases** page and download the installer matching your
 The macOS disk image opens a drag-to-Applications window. The Windows setup program installs the app and creates a Start Menu shortcut, with an optional desktop shortcut. On Linux, mark the AppImage executable in its file properties (or run `chmod +x Skylander-Character-Editor-linux-x86_64.AppImage`), then double-click it to launch.
 
 These packages are built and attached automatically when a version tag such as `v1.0.0` is pushed. GitHub Actions runs the build and tests for all four platforms; the release appears after every platform build succeeds.
+
+The browser editor is hosted separately on GitHub Pages. Its deployment workflow packages the web interface with the figure catalog, captured vehicle templates, and portraits.
 
 ### macOS first launch
 
