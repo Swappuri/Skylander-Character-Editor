@@ -12,7 +12,7 @@ const FRESH_CHARACTER_BLOCKS = {
 };
 const $ = (id) => document.getElementById(id);
 const ui = {
-  filePicker: $("file-picker"), folderPicker: $("folder-picker"), clear: $("clear-button"),
+  filePicker: $("file-picker"), folderPicker: $("folder-picker"), chooseFolder: $("choose-folder"), clear: $("clear-button"),
   empty: $("empty-state"), view: $("preview-view"), counter: $("file-counter"),
   previous: $("previous-button"), next: $("next-button"), content: $("figure-content"),
   art: $("figure-art"), artBox: $("art-box"), fallback: $("portrait-fallback"),
@@ -25,8 +25,6 @@ const ui = {
   maxCurrency: $("max-currency"), settingsHint: $("settings-hint"), apply: $("apply-button"), toast: $("toast"),
 };
 const assetBase = new URL(location.pathname.includes("/web/") ? "../assets/" : "./assets/", location.href);
-$("brand-icon").src = new URL("skylander-character-editor.png", assetBase).href;
-$("brand-icon").hidden = false;
 let catalog = {};
 let vehicleTemplates = {};
 let selectedFiles = [];
@@ -229,6 +227,18 @@ function detailName(header) {
   if (!header.record) return `Unknown figure (ID ${header.id})`;
   return header.record.variants?.[header.variant]?.name || header.record.name;
 }
+async function readDirectory(handle, parent = "") {
+  const files = [];
+  for await (const [name, entry] of handle.entries()) {
+    if (entry.kind === "directory") files.push(...await readDirectory(entry, `${parent}${name}/`));
+    else if (/\.(sky|dump)$/i.test(name)) {
+      const file = await entry.getFile();
+      Object.defineProperty(file, "relativePath", { value: `${parent}${name}` });
+      files.push(file);
+    }
+  }
+  return files;
+}
 function portraitPath(header) {
   if (!header.record) return null;
   const portrait = header.record.variants?.[header.variant]?.image || header.record.image;
@@ -245,7 +255,7 @@ async function loadCurrent() {
   if (!selectedFiles.length) return;
   const file = selectedFiles[currentIndex];
   ui.counter.textContent = `${currentIndex + 1} / ${selectedFiles.length}`;
-  ui.filename.textContent = file.webkitRelativePath || file.name;
+  ui.filename.textContent = file.relativePath || file.webkitRelativePath || file.name;
   ui.message.textContent = "Reading figure…";
   ui.art.hidden = true; ui.fallback.hidden = true;
   try {
@@ -271,7 +281,7 @@ async function loadCurrent() {
       ? `Starting Gearbits value: 0. Maximum: ${MAX_GEARBITS.toLocaleString()}. The same value will be applied to every selected vehicle.`
       : "Starting values: Level 1 and 0 gold. The same values will be applied to every selected Skylander.";
     if (currentIsVehicle) ui.gearCurrent.textContent = data.state === "uninitialized" ? "0" : data.gearbits.toLocaleString();
-    else { ui.levelCurrent.textContent = `Level ${data.level}`; ui.goldCurrent.textContent = data.gold.toLocaleString(); }
+    else { ui.levelCurrent.textContent = data.level.toLocaleString(); ui.goldCurrent.textContent = data.gold.toLocaleString(); }
     const picture = portraitPath(header);
     if (picture) {
       ui.art.onload = () => {
@@ -366,6 +376,15 @@ async function loadAssets() {
 }
 ui.filePicker.addEventListener("change", (event) => addSelection(event.target.files));
 ui.folderPicker.addEventListener("change", (event) => addSelection(event.target.files));
+ui.chooseFolder.addEventListener("click", async () => {
+  if (!window.showDirectoryPicker) { ui.folderPicker.click(); return; }
+  try {
+    const directory = await window.showDirectoryPicker({ mode: "read" });
+    addSelection(await readDirectory(directory));
+  } catch (error) {
+    if (error.name !== "AbortError") showToast(`Could not read that folder: ${error.message}`);
+  }
+});
 const dropTarget = document.querySelector(".preview-panel");
 dropTarget.addEventListener("dragover", (event) => { event.preventDefault(); dropTarget.classList.add("drag-over"); });
 dropTarget.addEventListener("dragleave", (event) => { if (!dropTarget.contains(event.relatedTarget)) dropTarget.classList.remove("drag-over"); });
