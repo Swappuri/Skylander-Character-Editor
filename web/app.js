@@ -239,6 +239,52 @@ async function readDirectory(handle, parent = "") {
   }
   return files;
 }
+function readEntryFile(entry) {
+  return new Promise((resolve, reject) => entry.file(resolve, reject));
+}
+function readEntryBatch(reader) {
+  return new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+}
+async function readDroppedEntry(entry, parent = "") {
+  if (entry.isFile) {
+    if (!/\.(sky|dump)$/i.test(entry.name)) return [];
+    const file = await readEntryFile(entry);
+    Object.defineProperty(file, "relativePath", { value: `${parent}${entry.name}` });
+    return [file];
+  }
+  if (!entry.isDirectory) return [];
+  const files = [], reader = entry.createReader();
+  const directoryPath = `${parent}${entry.name}/`;
+  while (true) {
+    const entries = await readEntryBatch(reader);
+    if (!entries.length) break;
+    for (const child of entries) files.push(...await readDroppedEntry(child, directoryPath));
+  }
+  return files;
+}
+async function filesFromDrop(dataTransfer) {
+  const items = Array.from(dataTransfer.items || []).filter((item) => item.kind === "file");
+  if (!items.length) return Array.from(dataTransfer.files || []);
+  const files = [];
+  for (const item of items) {
+    if (item.getAsFileSystemHandle) {
+      let handle = null;
+      try { handle = await item.getAsFileSystemHandle(); } catch { /* Fall back to the legacy entry API. */ }
+      if (handle) {
+        if (handle.kind === "directory") files.push(...await readDirectory(handle, `${handle.name}/`));
+        else if (/\.(sky|dump)$/i.test(handle.name)) files.push(await handle.getFile());
+        continue;
+      }
+    }
+    const entry = item.webkitGetAsEntry?.();
+    if (entry) files.push(...await readDroppedEntry(entry));
+    else {
+      const file = item.getAsFile();
+      if (file) files.push(file);
+    }
+  }
+  return files;
+}
 function portraitPath(header) {
   if (!header.record) return null;
   const portrait = header.record.variants?.[header.variant]?.image || header.record.image;
@@ -438,7 +484,11 @@ ui.chooseFolder.addEventListener("click", async () => {
 const dropTarget = document.querySelector(".preview-panel");
 dropTarget.addEventListener("dragover", (event) => { event.preventDefault(); dropTarget.classList.add("drag-over"); });
 dropTarget.addEventListener("dragleave", (event) => { if (!dropTarget.contains(event.relatedTarget)) dropTarget.classList.remove("drag-over"); });
-dropTarget.addEventListener("drop", (event) => { event.preventDefault(); dropTarget.classList.remove("drag-over"); addSelection(event.dataTransfer.files); });
+dropTarget.addEventListener("drop", async (event) => {
+  event.preventDefault(); dropTarget.classList.remove("drag-over");
+  try { addSelection(await filesFromDrop(event.dataTransfer)); }
+  catch (error) { showToast(`Could not read the dropped files: ${error.message}`); }
+});
 ui.clear.addEventListener("click", () => {
   selectedFiles = []; currentIndex = 0; ui.empty.hidden = false; ui.view.hidden = true; ui.apply.disabled = true;
   ui.level.value = "1"; ui.currency.value = "0"; setAccent("#48aaff");
