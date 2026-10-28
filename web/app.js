@@ -329,8 +329,52 @@ function copyName(file, used) {
   while (used.has(candidate.toLowerCase())) candidate = `${stem}_copy_${suffix++}${ext}`;
   used.add(candidate.toLowerCase()); return candidate;
 }
+function archivePath(file, outputName) {
+  const sourcePath = (file.relativePath || file.webkitRelativePath || file.name).replace(/\\/g, "/");
+  const parts = sourcePath.split("/").filter((part) => part && part !== "." && part !== "..");
+  parts[parts.length - 1] = outputName;
+  return parts.join("/");
+}
+const crc32Table = Uint32Array.from({ length: 256 }, (_, value) => {
+  let crc = value;
+  for (let bit = 0; bit < 8; bit++) crc = crc & 1 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1;
+  return crc >>> 0;
+});
+function crc32(data) {
+  let crc = 0xffffffff;
+  for (const byte of data) crc = crc32Table[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+function createZip(entries) {
+  if (entries.length > 0xffff) throw new Error("This selection has too many files to fit in one ZIP archive.");
+  const encoder = new TextEncoder(), localParts = [], centralParts = [];
+  let localOffset = 0, centralSize = 0;
+  for (const entry of entries) {
+    const name = encoder.encode(entry.path), data = entry.data;
+    if (name.length > 0xffff || data.length > 0xffffffff || localOffset > 0xffffffff) throw new Error("This selection is too large for a standard ZIP archive.");
+    const checksum = crc32(data);
+    const local = new Uint8Array(30 + name.length + data.length), localView = new DataView(local.buffer);
+    localView.setUint32(0, 0x04034b50, true); localView.setUint16(4, 20, true); localView.setUint16(6, 0x0800, true);
+    localView.setUint16(8, 0, true); localView.setUint32(14, checksum, true); localView.setUint32(18, data.length, true);
+    localView.setUint32(22, data.length, true); localView.setUint16(26, name.length, true);
+    local.set(name, 30); local.set(data, 30 + name.length); localParts.push(local);
+
+    const central = new Uint8Array(46 + name.length), centralView = new DataView(central.buffer);
+    centralView.setUint32(0, 0x02014b50, true); centralView.setUint16(4, 20, true); centralView.setUint16(6, 20, true);
+    centralView.setUint16(8, 0x0800, true); centralView.setUint16(10, 0, true); centralView.setUint32(16, checksum, true);
+    centralView.setUint32(20, data.length, true); centralView.setUint32(24, data.length, true);
+    centralView.setUint16(28, name.length, true); centralView.setUint32(42, localOffset, true); central.set(name, 46);
+    centralParts.push(central); localOffset += local.length; centralSize += central.length;
+  }
+  if (localOffset > 0xffffffff || centralSize > 0xffffffff) throw new Error("This selection is too large for a standard ZIP archive.");
+  const end = new Uint8Array(22), endView = new DataView(end.buffer);
+  endView.setUint32(0, 0x06054b50, true); endView.setUint16(8, entries.length, true); endView.setUint16(10, entries.length, true);
+  endView.setUint32(12, centralSize, true); endView.setUint32(16, localOffset, true);
+  return concatBytes(...localParts, ...centralParts, end);
+}
 function download(data, name) {
-  const url = URL.createObjectURL(new Blob([data], { type: "application/octet-stream" }));
+  const type = name.toLowerCase().endsWith(".zip") ? "application/zip" : "application/octet-stream";
+  const url = URL.createObjectURL(new Blob([data], { type }));
   const anchor = document.createElement("a"); anchor.href = url; anchor.download = name; anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
@@ -357,13 +401,19 @@ async function applyBatch() {
       const edited = currentIsVehicle
         ? await editVehicle(raw, header.record, currency)
         : await editCharacter(raw, header.record, level, currency);
-      outputs.push({ data: edited, name: copyName(file, used) });
+      const name = copyName(file, used);
+      outputs.push({ data: edited, name, path: archivePath(file, name) });
     }
-    for (const output of outputs) {
-      download(output.data, output.name);
-      await new Promise((resolve) => setTimeout(resolve, 180));
+    if (outputs.length === 1) {
+      download(outputs[0].data, outputs[0].name);
+    } else {
+      ui.apply.textContent = "Creating ZIP archive…";
+      const archive = createZip(outputs.map(({ data, path }) => ({ data, path })));
+      download(archive, "edited_copies.zip");
     }
-    showToast(`Created ${selectedFiles.length} validated edited ${selectedFiles.length === 1 ? "copy" : "copies"}. Check your browser's downloads.`);
+    showToast(outputs.length === 1
+      ? "Created 1 validated edited copy. Check your browser's downloads."
+      : `Created a ZIP archive with ${outputs.length} validated edited copies. Check your browser's downloads.`);
   } catch (error) { showToast(error.message, 8000); }
   finally { ui.apply.disabled = false; ui.apply.textContent = "Download edited copies"; }
 }
